@@ -1,3 +1,4 @@
+use crate::simulation::{reset_simulation, LanderState, SimulationParams};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
@@ -28,7 +29,15 @@ fn calculate_control(state) {
     }
 }
 
-pub fn ui_system(mut contexts: EguiContexts, mut editor_state: Local<EditorState>) {
+pub fn ui_system(
+    mut contexts: EguiContexts,
+    mut editor_state: ResMut<EditorState>,
+    mut lander_state: ResMut<LanderState>,
+    params: Res<SimulationParams>,
+) {
+    let mut reset_requested = false;
+    let mut start_stop_requested = false;
+
     egui::SidePanel::right("code_panel")
         .default_width(600.0)
         .show(contexts.ctx_mut(), |ui| {
@@ -44,6 +53,13 @@ pub fn ui_system(mut contexts: EguiContexts, mut editor_state: Local<EditorState
 
             ui.add_space(8.0);
 
+            // Status message
+            if lander_state.crashed {
+                ui.colored_label(egui::Color32::RED, "Crashed!");
+            } else if lander_state.landed {
+                ui.colored_label(egui::Color32::GREEN, "Landed successfully!");
+            }
+
             // Control buttons
             ui.horizontal(|ui| {
                 if ui
@@ -54,12 +70,18 @@ pub fn ui_system(mut contexts: EguiContexts, mut editor_state: Local<EditorState
                     })
                     .clicked()
                 {
-                    editor_state.is_running = !editor_state.is_running;
+                    start_stop_requested = true;
                 }
+
                 if ui.button("Reset").clicked() {
-                    // TODO: Reset simulation state
+                    reset_requested = true;
                 }
             });
+
+            // Manual thrust control (temporary until RHAI is implemented)
+            if editor_state.is_running && !lander_state.crashed && !lander_state.landed {
+                ui.add(egui::Slider::new(&mut lander_state.thrust_level, 0.0..=1.0).text("Thrust"));
+            }
         });
 
     // Bottom panel for telemetry
@@ -67,13 +89,29 @@ pub fn ui_system(mut contexts: EguiContexts, mut editor_state: Local<EditorState
         .min_height(50.0)
         .show(contexts.ctx_mut(), |ui| {
             ui.horizontal(|ui| {
-                ui.label("Altitude: 0.0 m");
+                ui.label(format!("Altitude: {:.1} m", lander_state.position.y));
                 ui.add_space(20.0);
-                ui.label("Velocity: 0.0 m/s");
+                ui.label(format!("Velocity: {:.1} m/s", lander_state.velocity.y));
                 ui.add_space(20.0);
-                ui.label("Fuel: 100.0 kg");
+                ui.label(format!("Fuel: {:.1} kg", lander_state.fuel));
                 ui.add_space(20.0);
-                ui.label("Thrust: 0%");
+                ui.label(format!(
+                    "Thrust: {}%",
+                    (lander_state.thrust_level * 100.0) as i32
+                ));
             });
         });
+
+    // Handle state changes outside of the UI closure
+    if reset_requested {
+        editor_state.is_running = false;
+        reset_simulation(&mut lander_state, &params);
+    }
+
+    if start_stop_requested {
+        editor_state.is_running = !editor_state.is_running;
+        if editor_state.is_running {
+            lander_state.thrust_level = 0.5; // Default thrust level until RHAI is implemented
+        }
+    }
 }

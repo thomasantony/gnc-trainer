@@ -4,4 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = "0.14.2"
+bevy = "0.15.0"
+bevy_egui = "0.31"                         # This version should work with egui 0.29
+egui_code_editor = { version = "=0.2.10" } # This version works with egui 0.29

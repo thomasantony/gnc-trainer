@@ -7,6 +7,7 @@ edition = "2021"
 bevy = "0.15.0"
 bevy_egui = "0.31"                         # This version should work with egui 0.29
 egui_code_editor = { version = "=0.2.10" } # This version works with egui 0.29
+rand = "0.8"
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]

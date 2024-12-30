@@ -1,3 +1,4 @@
+use crate::constants::{LANDER_HEIGHT, LANDER_WIDTH};
 use crate::simulation::LanderState;
 use bevy::asset::RenderAssetUsages;
 use bevy::color::palettes::css::PURPLE;
@@ -5,10 +6,11 @@ use bevy::prelude::*;
 use rand::Rng;
 
 // Constants for view configuration
-const WORLD_TO_SCREEN_SCALE: f32 = 4.0;
+const WORLD_TO_SCREEN_SCALE: f32 = 10.0;
 const VISUALIZATION_WIDTH: f32 = 680.0;
 const RIGHT_PANEL_WIDTH: f32 = 600.0;
 const PARTICLE_LIFETIME: f32 = 0.5;
+const GROUND_OFFSET: f32 = -200.0; // Pixels from center of screen to ground
 
 // Components
 #[derive(Component)]
@@ -26,17 +28,20 @@ pub struct ExhaustParticle {
 #[derive(Resource)]
 pub struct ParticleSpawnTimer(Timer);
 
-// Create a triangle mesh for the lander
 fn create_triangle_mesh() -> Mesh {
     let mut mesh = Mesh::new(
         bevy::render::render_resource::PrimitiveTopology::TriangleList,
         RenderAssetUsages::default(),
     );
 
+    // Convert from meters to screen coordinates
+    let half_height = (LANDER_HEIGHT / 2.0) * WORLD_TO_SCREEN_SCALE;
+    let half_width = (LANDER_WIDTH / 2.0) * WORLD_TO_SCREEN_SCALE;
+
     let vertices = [
-        [0.0, 10.0, 0.0],  // top
-        [-7.0, -7.0, 0.0], // bottom left
-        [7.0, -7.0, 0.0],  // bottom right
+        [0.0, half_height, 0.0],          // top
+        [-half_width, -half_height, 0.0], // bottom left
+        [half_width, -half_height, 0.0],  // bottom right
     ];
     let indices = [0u32, 1, 2]; // Counter-clockwise order
     let normals = [[0.0, 0.0, 1.0]; 3];
@@ -72,7 +77,7 @@ pub fn spawn_visualization(
             custom_size: Some(Vec2::new(VISUALIZATION_WIDTH, 2.0)),
             ..default()
         },
-        Transform::from_xyz(center_offset, 0.0, 0.0),
+        Transform::from_xyz(center_offset, GROUND_OFFSET, 0.0), // Move ground down
         GlobalTransform::default(),
         Visibility::default(),
         InheritedVisibility::default(),
@@ -129,24 +134,32 @@ pub fn particle_system(
         commands.entity(entity).despawn();
     }
 
-    // Spawn new particles based on thrust level
-    if lander_state.thrust_level > 0.0 {
+    // Spawn new particles based on thrust level and only if not landed/crashed
+    if lander_state.thrust_level > 0.0 && !lander_state.landed && !lander_state.crashed {
         timer.0.tick(time.delta());
         if timer.0.just_finished() {
             let lander_query = query_set.p0();
             if let Ok(lander_transform) = lander_query.get_single() {
                 let num_particles = (lander_state.thrust_level * 3.0) as i32;
                 for _ in 0..num_particles {
-                    spawn_particle(&mut commands, lander_transform.translation);
+                    spawn_particle(
+                        &mut commands,
+                        lander_transform.translation,
+                        WORLD_TO_SCREEN_SCALE,
+                    );
                 }
             }
         }
     }
 }
 
-fn spawn_particle(commands: &mut Commands, lander_pos: Vec3) {
+fn spawn_particle(commands: &mut Commands, lander_pos: Vec3, scale: f32) {
     let mut rng = rand::thread_rng();
-    let offset = Vec2::new(rng.gen_range(-3.0..3.0), rng.gen_range(-2.0..0.0));
+    let offset = Vec2::new(
+        rng.gen_range(-3.0..3.0),
+        // Offset downward from the base of the triangle
+        rng.gen_range(-2.0..0.0) - (LANDER_HEIGHT / 2.0 * scale),
+    );
 
     commands.spawn((
         Sprite {
@@ -170,6 +183,6 @@ fn world_to_screen(pos: Vec2) -> Vec2 {
     let center_offset = -(RIGHT_PANEL_WIDTH / 2.0);
     Vec2::new(
         pos.x * WORLD_TO_SCREEN_SCALE + center_offset,
-        pos.y * WORLD_TO_SCREEN_SCALE,
+        pos.y * WORLD_TO_SCREEN_SCALE + GROUND_OFFSET,
     )
 }

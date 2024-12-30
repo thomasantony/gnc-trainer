@@ -1,3 +1,4 @@
+use crate::rhai_api::ScriptEngine;
 use crate::simulation::{reset_simulation, LanderState, SimulationParams};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
@@ -13,15 +14,26 @@ impl Default for EditorState {
     fn default() -> Self {
         Self {
             code: r#"// Function to calculate thrust based on current lander state
-fn calculate_control(state) {
-    // TODO: Write your landing algorithm
-    // Available in state:
-    //   state.position.y  -> altitude in meters
-    //   state.velocity.y  -> vertical velocity in m/s
-    //   state.fuel       -> remaining fuel in kg
-    
-    // Return thrust level (0.0 to 1.0)
-    0.5  // constant thrust for now
+// Returns a value between 0.0 (no thrust) and 1.0 (full thrust)
+//
+// Available state variables:
+//   state["altitude"]  -> altitude in meters
+//   state["velocity"]  -> vertical velocity in m/s (positive is upward)
+//   state["fuel"]      -> remaining fuel in kg
+
+// Simple example: more thrust when going down, less when going up
+let target_velocity = if state["altitude"] > 10.0 { -5.0 } else { -1.0 };
+let error = state["velocity"] - target_velocity;
+
+// P controller
+let k_p = 10.0;
+let thrust = 0.5 - k_p * error;
+
+// Ensure we don't waste fuel if we're going up too fast
+if state["velocity"] > 2.0 {
+    0.0
+} else {
+    thrust
 }"#
             .into(),
             is_running: false,
@@ -32,11 +44,12 @@ fn calculate_control(state) {
 pub fn ui_system(
     mut contexts: EguiContexts,
     mut editor_state: ResMut<EditorState>,
+    mut script_engine: ResMut<ScriptEngine>,
     mut lander_state: ResMut<LanderState>,
     params: Res<SimulationParams>,
 ) {
     let mut reset_requested = false;
-    let mut start_stop_requested = false;
+    let start_stop_requested = false;
 
     egui::SidePanel::right("code_panel")
         .default_width(600.0)
@@ -53,8 +66,10 @@ pub fn ui_system(
 
             ui.add_space(8.0);
 
-            // Status message
-            if lander_state.crashed {
+            // Status and error messages
+            if let Some(error) = &script_engine.error_message {
+                ui.colored_label(egui::Color32::RED, error);
+            } else if lander_state.crashed {
                 ui.colored_label(egui::Color32::RED, "Crashed!");
             } else if lander_state.landed {
                 ui.colored_label(egui::Color32::GREEN, "Landed successfully!");
@@ -70,18 +85,21 @@ pub fn ui_system(
                     })
                     .clicked()
                 {
-                    start_stop_requested = true;
+                    if !editor_state.is_running {
+                        // Compile script before starting
+                        if script_engine.compile_script(&editor_state.code).is_ok() {
+                            editor_state.is_running = true;
+                            reset_simulation(&mut lander_state, &params);
+                        }
+                    } else {
+                        editor_state.is_running = false;
+                    }
                 }
 
                 if ui.button("Reset").clicked() {
                     reset_requested = true;
                 }
             });
-
-            // Manual thrust control (temporary until RHAI is implemented)
-            if editor_state.is_running && !lander_state.crashed && !lander_state.landed {
-                ui.add(egui::Slider::new(&mut lander_state.thrust_level, 0.0..=1.0).text("Thrust"));
-            }
         });
 
     // Bottom panel for telemetry
@@ -105,13 +123,14 @@ pub fn ui_system(
     // Handle state changes outside of the UI closure
     if reset_requested {
         editor_state.is_running = false;
+        script_engine.error_message = None;
         reset_simulation(&mut lander_state, &params);
     }
 
     if start_stop_requested {
         editor_state.is_running = !editor_state.is_running;
         if editor_state.is_running {
-            lander_state.thrust_level = 0.5; // Default thrust level until RHAI is implemented
+            reset_simulation(&mut lander_state, &params);
         }
     }
 }

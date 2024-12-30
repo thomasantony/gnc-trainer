@@ -1,11 +1,13 @@
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 
+mod constants;
 mod rhai_api;
 mod simulation;
 mod ui;
 mod visualization;
 
+use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState, SimulationParams};
 use ui::{ui_system, EditorState};
 use visualization::{particle_system, spawn_visualization, update_visualization};
@@ -24,6 +26,7 @@ fn main() {
         .insert_resource(EditorState::default())
         .insert_resource(LanderState::default())
         .insert_resource(SimulationParams::default())
+        .insert_resource(ScriptEngine::default())
         .add_systems(Startup, (setup, spawn_visualization))
         .add_systems(
             Update,
@@ -43,7 +46,7 @@ fn setup(
     params: Res<SimulationParams>,
 ) {
     // Camera setup
-    commands.spawn((Camera2d::default(), Transform::from_xyz(0.0, 100.0, 1000.0)));
+    commands.spawn((Camera2d::default(), Transform::from_xyz(0.0, 0.0, 1000.0)));
 
     // Initialize lander state
     reset_simulation(&mut lander_state, &params);

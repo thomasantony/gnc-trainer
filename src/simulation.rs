@@ -1,5 +1,10 @@
 use bevy::prelude::*;
 
+use crate::{
+    rhai_api::{LanderControlState, ScriptEngine},
+    ui::EditorState,
+};
+
 #[derive(Resource, Default)]
 pub struct LanderState {
     pub position: Vec2,    // meters
@@ -28,7 +33,7 @@ impl Default for SimulationParams {
             max_thrust: 3.0 * 463.0,    // N (3x 463N vernier engines)
             isp: 326.0,                 // seconds
             gravity: 1.62,              // m/s² (lunar gravity)
-            initial_altitude: 100.0,    // meters
+            initial_altitude: 50.0,     // meters
             initial_fuel: 70.98,        // kg
             safe_landing_velocity: 2.0, // m/s
         }
@@ -44,8 +49,26 @@ pub fn simulation_system(
     time: Res<Time>,
     mut state: ResMut<LanderState>,
     params: Res<SimulationParams>,
+    editor_state: Res<EditorState>,
+    mut script_engine: ResMut<ScriptEngine>,
 ) {
-    if !state.landed && !state.crashed {
+    if !state.landed && !state.crashed && editor_state.is_running {
+        // Create control state for script
+        let control_state = LanderControlState {
+            altitude: state.position.y,
+            velocity: state.velocity.y,
+            fuel: state.fuel,
+        };
+
+        // Get thrust from script
+        if let Some(thrust) = script_engine.calculate_thrust(control_state) {
+            state.thrust_level = thrust as f32;
+        } else {
+            // Script error occurred - stop simulation
+            state.thrust_level = 0.0;
+            return;
+        }
+
         let dt = time.delta_secs();
 
         // Calculate current mass
@@ -71,16 +94,19 @@ pub fn simulation_system(
         let fuel_flow = calculate_mass_flow(thrust_magnitude, params.isp);
         state.fuel = (state.fuel - fuel_flow * dt).max(0.0);
 
-        // Ground collision detection
-        if state.position.y <= 0.0 {
-            state.position.y = 0.0;
-            // Check landing conditions
+        // Ground collision detection (using the base of the triangle, which is 7 units below center)
+        use crate::constants::LANDER_BASE_OFFSET;
+        if state.position.y <= LANDER_BASE_OFFSET {
+            state.position.y = LANDER_BASE_OFFSET; // Keep the base exactly at ground level
+                                                   // Check landing conditions
             if state.velocity.y.abs() <= params.safe_landing_velocity {
                 state.landed = true;
             } else {
                 state.crashed = true;
             }
             state.velocity.y = 0.0;
+            // Cut off thrusters on touchdown
+            state.thrust_level = 0.0;
         }
     }
 }

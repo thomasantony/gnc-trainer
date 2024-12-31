@@ -1,42 +1,26 @@
-use crate::rhai_api::ScriptEngine;
-use crate::simulation::{reset_simulation, LanderState, SimulationParams};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
+
+use crate::{
+    levels::{ControlScheme, CurrentLevel},
+    rhai_api::{ControlType, ScriptEngine},
+    simulation::{reset_simulation, LanderState},
+};
 
 #[derive(Resource)]
 pub struct EditorState {
     pub code: String,
     pub is_running: bool,
+    pub current_level: usize,
 }
 
 impl Default for EditorState {
     fn default() -> Self {
         Self {
-            code: r#"// Function to calculate thrust based on current lander state
-// Returns a value between 0.0 (no thrust) and 1.0 (full thrust)
-//
-// Available state variables:
-//   state["altitude"]  -> altitude in meters
-//   state["velocity"]  -> vertical velocity in m/s (positive is upward)
-//   state["fuel"]      -> remaining fuel in kg
-
-// Simple example: more thrust when going down, less when going up
-let target_velocity = if state["altitude"] > 10.0 { -5.0 } else { -1.0 };
-let error = state["velocity"] - target_velocity;
-
-// P controller
-let k_p = 10.0;
-let thrust = 0.5 - k_p * error;
-
-// Ensure we don't waste fuel if we're going up too fast
-if state["velocity"] > 2.0 {
-    0.0
-} else {
-    thrust
-}"#
-            .into(),
+            code: include_str!("../assets/scripts/level1_default.rhai").into(),
             is_running: false,
+            current_level: 1,
         }
     }
 }
@@ -46,14 +30,64 @@ pub fn ui_system(
     mut editor_state: ResMut<EditorState>,
     mut script_engine: ResMut<ScriptEngine>,
     mut lander_state: ResMut<LanderState>,
-    params: Res<SimulationParams>,
+    mut level: ResMut<CurrentLevel>,
 ) {
     let mut reset_requested = false;
-    let start_stop_requested = false;
+    let mut level_changed = false;
 
+    // Top menu bar
+    egui::TopBottomPanel::top("menu_bar").show(contexts.ctx_mut(), |ui| {
+        egui::menu::bar(ui, |ui| {
+            ui.menu_button("Levels", |ui| {
+                if ui.button("Level 1: Vertical Landing").clicked() {
+                    editor_state.current_level = 1;
+                    level_changed = true;
+                    ui.close_menu();
+                }
+                if ui.button("Level 2: Precision Landing").clicked() {
+                    editor_state.current_level = 2;
+                    level_changed = true;
+                    ui.close_menu();
+                }
+            });
+        });
+    });
+
+    // Code editor panel
     egui::SidePanel::right("code_panel")
         .default_width(600.0)
         .show(contexts.ctx_mut(), |ui| {
+            // Level description
+            ui.heading(&level.config.name);
+            ui.label(&level.config.description);
+            ui.add_space(8.0);
+
+            // Available API documentation
+            ui.collapsing("Available API", |ui| {
+                ui.label("Script state variables:");
+                for var in &level.config.script_api {
+                    ui.label(format!("• state[\"{}\"]", var));
+                }
+                ui.add_space(4.0);
+
+                match level.config.control_scheme {
+                    ControlScheme::VerticalOnly => {
+                        ui.label("Return control with:");
+                        ui.code("simple_control(thrust)");
+                        ui.label("where thrust is between 0.0 and 1.0");
+                    }
+                    ControlScheme::ThrustVector => {
+                        ui.label("Return control with:");
+                        ui.code("vector_control(thrust, gimbal)");
+                        ui.label("where:");
+                        ui.label("• thrust is between 0.0 and 1.0");
+                        ui.label("• gimbal is between -0.4 and 0.4 radians");
+                    }
+                }
+            });
+
+            ui.add_space(8.0);
+
             // Code editor
             CodeEditor::default()
                 .id_source("code_editor")
@@ -89,7 +123,7 @@ pub fn ui_system(
                         // Compile script before starting
                         if script_engine.compile_script(&editor_state.code).is_ok() {
                             editor_state.is_running = true;
-                            reset_simulation(&mut lander_state, &params);
+                            reset_simulation(&mut lander_state, &level);
                         }
                     } else {
                         editor_state.is_running = false;
@@ -104,33 +138,81 @@ pub fn ui_system(
 
     // Bottom panel for telemetry
     egui::TopBottomPanel::bottom("telemetry")
-        .min_height(50.0)
+        .min_height(80.0)
         .show(contexts.ctx_mut(), |ui| {
             ui.horizontal(|ui| {
-                ui.label(format!("Altitude: {:.1} m", lander_state.position.y));
+                // Position
+                ui.vertical(|ui| {
+                    ui.label("Position:");
+                    ui.label(format!("X: {:.1} m", lander_state.position.x));
+                    ui.label(format!("Y: {:.1} m", lander_state.position.y));
+                });
+
                 ui.add_space(20.0);
-                ui.label(format!("Velocity: {:.1} m/s", lander_state.velocity.y));
+
+                // Velocity
+                ui.vertical(|ui| {
+                    ui.label("Velocity:");
+                    ui.label(format!("VX: {:.1} m/s", lander_state.velocity.x));
+                    ui.label(format!("VY: {:.1} m/s", lander_state.velocity.y));
+                });
+
                 ui.add_space(20.0);
-                ui.label(format!("Fuel: {:.1} kg", lander_state.fuel));
-                ui.add_space(20.0);
-                ui.label(format!(
-                    "Thrust: {}%",
-                    (lander_state.thrust_level * 100.0) as i32
-                ));
+
+                // Rotation (only show for thrust vector control)
+                if matches!(level.config.control_scheme, ControlScheme::ThrustVector) {
+                    ui.vertical(|ui| {
+                        ui.label("Rotation:");
+                        ui.label(format!("Angle: {:.1}°", lander_state.rotation.to_degrees()));
+                        ui.label(format!(
+                            "Gimbal: {:.1}°",
+                            lander_state.gimbal_angle.to_degrees()
+                        ));
+                    });
+
+                    ui.add_space(20.0);
+                }
+
+                // Thrust and fuel
+                ui.vertical(|ui| {
+                    ui.label("Engine:");
+                    ui.label(format!(
+                        "Thrust: {}%",
+                        (lander_state.thrust_level * 100.0) as i32
+                    ));
+                    ui.label(format!("Fuel: {:.1} kg", lander_state.fuel));
+                });
             });
         });
 
-    // Handle state changes outside of the UI closure
+    // Handle level changes
+    if level_changed {
+        editor_state.is_running = false;
+        script_engine.error_message = None;
+
+        // Load new level
+        *level = CurrentLevel::load(editor_state.current_level);
+
+        // Update script engine control type
+        match level.config.control_scheme {
+            ControlScheme::VerticalOnly => script_engine.set_control_type(ControlType::Simple),
+            ControlScheme::ThrustVector => script_engine.set_control_type(ControlType::Vectored),
+        }
+
+        // Load default script for level
+        editor_state.code = std::fs::read_to_string(format!(
+            "assets/scripts/level{}_default.rhai",
+            editor_state.current_level
+        ))
+        .unwrap_or_else(|_| String::new());
+
+        reset_simulation(&mut lander_state, &level);
+    }
+
+    // Handle reset request
     if reset_requested {
         editor_state.is_running = false;
         script_engine.error_message = None;
-        reset_simulation(&mut lander_state, &params);
-    }
-
-    if start_stop_requested {
-        editor_state.is_running = !editor_state.is_running;
-        if editor_state.is_running {
-            reset_simulation(&mut lander_state, &params);
-        }
+        reset_simulation(&mut lander_state, &level);
     }
 }

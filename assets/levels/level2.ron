@@ -1,0 +1,33 @@
+(
+    name: "Precision Lunar Landing",
+    description: "Land safely at a specific location using thrust vectoring",
+    physics: (
+        g: -1.62,    // lunar gravity
+        m: 300.0,    // dry mass
+        t: 1389.0,   // max thrust
+        isp: 326.0,  // specific impulse
+    ),
+    initial: (
+        x0: -30.0,   // start left of target
+        y0: 50.0,    // starting altitude
+        vx0: 0.0,    // no initial velocity
+        vy0: 0.0,
+        r0: 0.0,     // vertical orientation
+        f0: 70.98,   // initial fuel
+    ),
+    success: (
+        vx_max: 1.0,   // max horizontal landing speed
+        vy_max: 2.0,   // max vertical landing speed
+        x_min: -2.0,   // landing zone boundaries
+        x_max: 2.0,
+    ),
+    control_scheme: ThrustVector,
+    script_api: [
+        "x",
+        "y",
+        "vx",
+        "vy",
+        "rotation",
+        "fuel",
+    ],
+)

@@ -1,7 +1,8 @@
 use crate::constants::{LANDER_HEIGHT, LANDER_WIDTH};
+use crate::levels::CurrentLevel;
 use crate::simulation::LanderState;
 use bevy::asset::RenderAssetUsages;
-use bevy::color::palettes::css::PURPLE;
+use bevy::color::palettes::css::{DARK_GREEN, PURPLE};
 use bevy::prelude::*;
 use rand::Rng;
 
@@ -18,6 +19,9 @@ pub struct Lander;
 
 #[derive(Component)]
 struct Ground;
+
+#[derive(Component)]
+struct LandingZone;
 
 #[derive(Component)]
 pub struct ExhaustParticle {
@@ -54,18 +58,18 @@ fn create_triangle_mesh() -> Mesh {
     mesh
 }
 
-// Spawn the visualization entities
 pub fn spawn_visualization(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    level: Res<CurrentLevel>,
 ) {
     let center_offset = -(RIGHT_PANEL_WIDTH / 2.0);
 
     // Spawn lander as a solid triangle
     commands.spawn((
         Mesh2d(meshes.add(create_triangle_mesh())),
-        MeshMaterial2d(materials.add(Color::from(PURPLE))),
+        MeshMaterial2d(materials.add(ColorMaterial::from_color(PURPLE))),
         Transform::from_xyz(center_offset, 0.0, 1.0),
         Lander,
     ));
@@ -73,16 +77,28 @@ pub fn spawn_visualization(
     // Spawn ground
     commands.spawn((
         Sprite {
-            color: Color::srgb(0.0, 0.8, 0.0), // Green
+            color: DARK_GREEN.into(),
             custom_size: Some(Vec2::new(VISUALIZATION_WIDTH, 2.0)),
             ..default()
         },
-        Transform::from_xyz(center_offset, GROUND_OFFSET, 0.0), // Move ground down
-        GlobalTransform::default(),
-        Visibility::default(),
-        InheritedVisibility::default(),
-        ViewVisibility::default(),
+        Transform::from_xyz(center_offset, GROUND_OFFSET, 0.0),
         Ground,
+    ));
+
+    // Spawn landing zone
+    let landing_zone_width =
+        (level.config.success.x_max - level.config.success.x_min) * WORLD_TO_SCREEN_SCALE;
+    let landing_zone_x =
+        (level.config.success.x_min + level.config.success.x_max) / 2.0 * WORLD_TO_SCREEN_SCALE;
+
+    commands.spawn((
+        Sprite {
+            color: Color::srgba(0.0, 1.0, 0.0, 0.3),
+            custom_size: Some(Vec2::new(landing_zone_width, 10.0)),
+            ..default()
+        },
+        Transform::from_xyz(center_offset + landing_zone_x, GROUND_OFFSET + 5.0, 0.5),
+        LandingZone,
     ));
 
     // Initialize particle spawn timer

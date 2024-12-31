@@ -2,7 +2,7 @@ use crate::constants::{LANDER_HEIGHT, LANDER_WIDTH};
 use crate::levels::CurrentLevel;
 use crate::simulation::LanderState;
 use bevy::asset::RenderAssetUsages;
-use bevy::color::palettes::css::{DARK_GREEN, PURPLE};
+use bevy::color::palettes::css::*;
 use bevy::prelude::*;
 use rand::Rng;
 
@@ -21,11 +21,12 @@ pub struct Lander;
 struct Ground;
 
 #[derive(Component)]
-struct LandingZone;
+pub struct LandingZone;
 
 #[derive(Component)]
 pub struct ExhaustParticle {
     lifetime: Timer,
+    velocity: Vec2,
 }
 
 // Resource to manage particle spawning
@@ -47,7 +48,7 @@ fn create_triangle_mesh() -> Mesh {
         [-half_width, -half_height, 0.0], // bottom left
         [half_width, -half_height, 0.0],  // bottom right
     ];
-    let indices = [0u32, 1, 2]; // Counter-clockwise order
+    let indices = [0u32, 1, 2];
     let normals = [[0.0, 0.0, 1.0]; 3];
     let uvs = [[0.5, 0.0], [0.0, 1.0], [1.0, 1.0]];
 
@@ -66,18 +67,22 @@ pub fn spawn_visualization(
 ) {
     let center_offset = -(RIGHT_PANEL_WIDTH / 2.0);
 
-    // Spawn lander as a solid triangle
+    // Spawn lander
     commands.spawn((
         Mesh2d(meshes.add(create_triangle_mesh())),
         MeshMaterial2d(materials.add(ColorMaterial::from_color(PURPLE))),
-        Transform::from_xyz(center_offset, 0.0, 1.0),
+        Transform {
+            translation: Vec3::new(center_offset, 0.0, 1.0),
+            rotation: Quat::IDENTITY,
+            scale: Vec3::ONE,
+        },
         Lander,
     ));
 
     // Spawn ground
     commands.spawn((
         Sprite {
-            color: DARK_GREEN.into(),
+            color: FOREST_GREEN.into(),
             custom_size: Some(Vec2::new(VISUALIZATION_WIDTH, 2.0)),
             ..default()
         },
@@ -93,7 +98,7 @@ pub fn spawn_visualization(
 
     commands.spawn((
         Sprite {
-            color: Color::srgba(0.0, 1.0, 0.0, 0.3),
+            color: Color::srgba(0.0, 1.0, 0.0, 0.3), // Semi-transparent green
             custom_size: Some(Vec2::new(landing_zone_width, 10.0)),
             ..default()
         },
@@ -101,7 +106,6 @@ pub fn spawn_visualization(
         LandingZone,
     ));
 
-    // Initialize particle spawn timer
     commands.insert_resource(ParticleSpawnTimer(Timer::from_seconds(
         0.05,
         TimerMode::Repeating,
@@ -110,13 +114,56 @@ pub fn spawn_visualization(
 
 pub fn update_visualization(
     mut lander_query: Query<&mut Transform, With<Lander>>,
+    mut landing_zone_query: Query<&mut Transform, (With<LandingZone>, Without<Lander>)>,
     lander_state: Res<LanderState>,
+    level: Res<CurrentLevel>,
 ) {
     if let Ok(mut transform) = lander_query.get_single_mut() {
         let screen_pos = world_to_screen(lander_state.position);
         transform.translation.x = screen_pos.x;
         transform.translation.y = screen_pos.y;
+
+        // Set rotation around the Z axis (2D rotation)
+        // Note: lander_state.rotation is in radians, which is what we want
+        transform.rotation = Quat::from_rotation_z(lander_state.rotation);
     }
+
+    if let Ok(mut transform) = landing_zone_query.get_single_mut() {
+        let center_offset = -(RIGHT_PANEL_WIDTH / 2.0);
+        let landing_zone_x =
+            (level.config.success.x_min + level.config.success.x_max) / 2.0 * WORLD_TO_SCREEN_SCALE;
+        transform.translation.x = center_offset + landing_zone_x;
+    }
+}
+
+fn spawn_particle(
+    commands: &mut Commands,
+    lander_pos: Vec3,
+    base_position: Vec2,
+    particle_direction: Vec2,
+) {
+    let mut rng = rand::thread_rng();
+    let spread = 0.2; // Spread angle in radians
+    let angle = particle_direction + rng.gen_range(-spread..spread);
+    let speed = 100.0 * rng.gen_range(0.8..1.2); // Pixels per second, with some variation
+
+    let offset = Vec2::new(
+        base_position.x + rng.gen_range(-3.0..3.0),
+        base_position.y + rng.gen_range(-3.0..3.0),
+    );
+
+    commands.spawn((
+        Sprite {
+            color: ORANGE_RED.into(),
+            custom_size: Some(Vec2::new(2.0, 2.0)),
+            ..default()
+        },
+        Transform::from_xyz(lander_pos.x + offset.x, lander_pos.y + offset.y, 0.5),
+        ExhaustParticle {
+            lifetime: Timer::from_seconds(PARTICLE_LIFETIME, TimerMode::Once),
+            velocity: (particle_direction + angle) * speed,
+        },
+    ));
 }
 
 pub fn particle_system(
@@ -138,9 +185,9 @@ pub fn particle_system(
             if particle.lifetime.finished() {
                 to_despawn.push(entity);
             } else {
-                // Move particle downward and add some random horizontal movement
-                transform.translation.y -= 100.0 * time.delta().as_secs_f32();
-                transform.translation.x += rand::thread_rng().gen_range(-0.5..0.5);
+                // Move particle based on its velocity
+                transform.translation.x += particle.velocity.x * time.delta_secs();
+                transform.translation.y += particle.velocity.y * time.delta_secs();
             }
         }
     }
@@ -150,48 +197,36 @@ pub fn particle_system(
         commands.entity(entity).despawn();
     }
 
-    // Spawn new particles based on thrust level and only if not landed/crashed
     if lander_state.thrust_level > 0.0 && !lander_state.landed && !lander_state.crashed {
         timer.0.tick(time.delta());
         if timer.0.just_finished() {
             let lander_query = query_set.p0();
             if let Ok(lander_transform) = lander_query.get_single() {
                 let num_particles = (lander_state.thrust_level * 3.0) as i32;
+
+                // When rotation is 0 (pointing up):
+                //   - particles should come out the bottom
+                //   - gimbal rotates this direction
+                let exhaust_direction_angle =
+                    lander_state.rotation + lander_state.gimbal_angle - std::f32::consts::FRAC_PI_2;
+
+                // Spawn position should be at the base of the triangle
+                let exhaust_direction =
+                    Vec2::new(exhaust_direction_angle.cos(), exhaust_direction_angle.sin());
+                let exhaust_offset =
+                    exhaust_direction * LANDER_HEIGHT * 0.5 * WORLD_TO_SCREEN_SCALE;
+
                 for _ in 0..num_particles {
                     spawn_particle(
                         &mut commands,
                         lander_transform.translation,
-                        WORLD_TO_SCREEN_SCALE,
+                        exhaust_offset,
+                        exhaust_direction,
                     );
                 }
             }
         }
     }
-}
-
-fn spawn_particle(commands: &mut Commands, lander_pos: Vec3, scale: f32) {
-    let mut rng = rand::thread_rng();
-    let offset = Vec2::new(
-        rng.gen_range(-3.0..3.0),
-        // Offset downward from the base of the triangle
-        rng.gen_range(-2.0..0.0) - (LANDER_HEIGHT / 2.0 * scale),
-    );
-
-    commands.spawn((
-        Sprite {
-            color: Color::srgb(1.0, 0.6, 0.0), // Orange
-            custom_size: Some(Vec2::new(2.0, 2.0)),
-            ..default()
-        },
-        Transform::from_xyz(lander_pos.x + offset.x, lander_pos.y + offset.y, 0.5),
-        GlobalTransform::default(),
-        ExhaustParticle {
-            lifetime: Timer::from_seconds(PARTICLE_LIFETIME, TimerMode::Once),
-        },
-        Visibility::default(),
-        InheritedVisibility::default(),
-        ViewVisibility::default(),
-    ));
 }
 
 // Convert simulation coordinates to screen coordinates

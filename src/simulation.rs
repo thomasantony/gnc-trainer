@@ -6,6 +6,14 @@ use crate::{
     rhai_api::{ControlOutput, LanderState as ScriptLanderState, ScriptEngine},
 };
 
+// Control limits
+const MAX_GIMBAL_ANGLE: f32 = 0.4; // radians (~23 degrees)
+const MIN_GIMBAL_ANGLE: f32 = -0.4; // radians
+const MAX_THRUST: f32 = 1.0;
+const MIN_THRUST: f32 = 0.0;
+const MAX_THRUST_CHANGE_RATE: f32 = 2.0; // Maximum thrust change per second
+const MAX_GIMBAL_RATE: f32 = 1.0; // Maximum gimbal angle change per second
+
 #[derive(Resource, Default)]
 pub struct LanderState {
     pub position: Vec2,    // (x, y) position in meters
@@ -21,7 +29,6 @@ pub struct LanderState {
 
 // Constants for rotational dynamics
 const MOMENT_OF_INERTIA: f32 = 100.0; // kg·m²
-const MAX_GIMBAL_ANGLE: f32 = 0.4; // radians (~23 degrees)
 const ANGULAR_DAMPING: f32 = 0.2; // artificial damping coefficient
 
 pub fn simulation_system(
@@ -31,6 +38,8 @@ pub fn simulation_system(
     mut script_engine: ResMut<ScriptEngine>,
 ) {
     if !state.landed && !state.crashed {
+        let dt = time.delta_secs();
+
         // Create control state for script
         let script_state = ScriptLanderState {
             x: state.position.x,
@@ -41,36 +50,63 @@ pub fn simulation_system(
             fuel: state.fuel,
         };
 
-        // Get control output from script
+        // Get thrust and gimbal commands from script
+        let mut new_thrust;
+        let mut new_gimbal;
+
         if let Some(control) = script_engine.calculate_control(script_state) {
             match control {
                 ControlOutput::Simple(simple) => {
-                    state.thrust_level = simple.thrust.clamp(0.0, 1.0);
-                    state.gimbal_angle = 0.0;
+                    new_thrust = simple.thrust;
+                    new_gimbal = 0.0;
                 }
                 ControlOutput::Vectored(vectored) => {
-                    state.thrust_level = vectored.thrust.clamp(0.0, 1.0);
-                    state.gimbal_angle = vectored.gimbal.clamp(-MAX_GIMBAL_ANGLE, MAX_GIMBAL_ANGLE);
+                    new_thrust = vectored.thrust;
+                    new_gimbal = vectored.gimbal;
                 }
             }
         } else {
-            // Script error occurred - stop thrusting
-            state.thrust_level = 0.0;
-            state.gimbal_angle = 0.0;
+            // Script error occurred - maintain current values
             return;
         }
 
-        let dt = time.delta_secs();
+        // Apply rate limits and clamps to controls
+        new_thrust = new_thrust.clamp(MIN_THRUST, MAX_THRUST);
+        new_gimbal = new_gimbal.clamp(MIN_GIMBAL_ANGLE, MAX_GIMBAL_ANGLE);
+
+        // Rate limit the thrust changes
+        let max_thrust_delta = MAX_THRUST_CHANGE_RATE * dt;
+        new_thrust = if new_thrust > state.thrust_level {
+            (state.thrust_level + max_thrust_delta).min(new_thrust)
+        } else {
+            (state.thrust_level - max_thrust_delta).max(new_thrust)
+        };
+
+        // Rate limit the gimbal changes
+        let max_gimbal_delta = MAX_GIMBAL_RATE * dt;
+        new_gimbal = if new_gimbal > state.gimbal_angle {
+            (state.gimbal_angle + max_gimbal_delta).min(new_gimbal)
+        } else {
+            (state.gimbal_angle - max_gimbal_delta).max(new_gimbal)
+        };
+
+        // Update control state
+        state.thrust_level = new_thrust;
+        state.gimbal_angle = new_gimbal;
+
         let config = &level.config;
 
         // Calculate current mass
         let total_mass = config.physics.m + state.fuel;
 
-        // Calculate thrust vector based on rotation and gimbal
-        let thrust_angle = state.rotation + state.gimbal_angle;
+        // When rotation is 0 (pointing up):
+        //   - thrust should be upward
+        //   - gimbal rotates this direction
+        let thrust_direction = -state.rotation - state.gimbal_angle;
+
         let thrust_force = Vec2::new(
-            thrust_angle.sin() * state.thrust_level * config.physics.t,
-            thrust_angle.cos() * state.thrust_level * config.physics.t,
+            thrust_direction.sin() * state.thrust_level * config.physics.t,
+            thrust_direction.cos() * state.thrust_level * config.physics.t,
         );
 
         // Calculate gravity force (y-axis only)

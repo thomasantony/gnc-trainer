@@ -3,7 +3,7 @@ use bevy_egui::{egui, EguiContexts};
 use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
 
 use crate::{
-    levels::{ControlScheme, CurrentLevel},
+    levels::{ControlScheme, CurrentLevel, LevelManager},
     rhai_api::{ControlType, ScriptEngine},
     simulation::{reset_simulation, LanderState},
 };
@@ -12,7 +12,6 @@ use crate::{
 pub struct EditorState {
     pub code: String,
     pub is_running: bool,
-    pub current_level: usize,
 }
 
 impl Default for EditorState {
@@ -20,7 +19,6 @@ impl Default for EditorState {
         Self {
             code: include_str!("../assets/scripts/level1_default.rhai").into(),
             is_running: false,
-            current_level: 1,
         }
     }
 }
@@ -30,47 +28,72 @@ pub fn ui_system(
     mut editor_state: ResMut<EditorState>,
     mut script_engine: ResMut<ScriptEngine>,
     mut lander_state: ResMut<LanderState>,
-    mut level: ResMut<CurrentLevel>,
+    mut current_level: ResMut<CurrentLevel>,
+    level_manager: Res<LevelManager>,
 ) {
     let mut reset_requested = false;
-    let mut level_changed = false;
+    let mut new_level_number = None;
 
     // Top menu bar
     egui::TopBottomPanel::top("menu_bar").show(contexts.ctx_mut(), |ui| {
         egui::menu::bar(ui, |ui| {
             ui.menu_button("Levels", |ui| {
-                if ui.button("Level 1: Vertical Landing").clicked() {
-                    editor_state.current_level = 1;
-                    level_changed = true;
-                    ui.close_menu();
-                }
-                if ui.button("Level 2: Precision Landing").clicked() {
-                    editor_state.current_level = 2;
-                    level_changed = true;
-                    ui.close_menu();
+                for (number, name) in &level_manager.available_levels {
+                    if ui.button(format!("Level {}: {}", number, name)).clicked() {
+                        new_level_number = Some(*number);
+                        ui.close_menu();
+                    }
                 }
             });
         });
     });
 
-    // Code editor panel
+    // Handle level selection
+    if let Some(level_num) = new_level_number {
+        if let Some(new_config) = level_manager.get_level(level_num) {
+            editor_state.is_running = false;
+            script_engine.error_message = None;
+
+            // Update current level
+            current_level.config = new_config.clone();
+
+            // Update script engine control type
+            match new_config.control_scheme {
+                ControlScheme::VerticalOnly => script_engine.set_control_type(ControlType::Simple),
+                ControlScheme::ThrustVector => {
+                    script_engine.set_control_type(ControlType::Vectored)
+                }
+            }
+
+            // Load default script for level
+            if let Ok(script) =
+                std::fs::read_to_string(format!("assets/scripts/level{}_default.rhai", level_num))
+            {
+                editor_state.code = script;
+            }
+
+            reset_simulation(&mut lander_state, &current_level);
+        }
+    }
+
+    // Right panel with code editor
     egui::SidePanel::right("code_panel")
         .default_width(600.0)
         .show(contexts.ctx_mut(), |ui| {
-            // Level description
-            ui.heading(&level.config.name);
-            ui.label(&level.config.description);
+            // Level info
+            ui.heading(&current_level.config.name);
+            ui.label(&current_level.config.description);
             ui.add_space(8.0);
 
             // Available API documentation
             ui.collapsing("Available API", |ui| {
                 ui.label("Script state variables:");
-                for var in &level.config.script_api {
+                for var in &current_level.config.script_api {
                     ui.label(format!("• state[\"{}\"]", var));
                 }
                 ui.add_space(4.0);
 
-                match level.config.control_scheme {
+                match current_level.config.control_scheme {
                     ControlScheme::VerticalOnly => {
                         ui.label("Return control with:");
                         ui.code("simple_control(thrust)");
@@ -100,7 +123,7 @@ pub fn ui_system(
 
             ui.add_space(8.0);
 
-            // Status and error messages
+            // Status messages
             if let Some(error) = &script_engine.error_message {
                 ui.colored_label(egui::Color32::RED, error);
             } else if lander_state.crashed {
@@ -111,19 +134,18 @@ pub fn ui_system(
 
             // Control buttons
             ui.horizontal(|ui| {
-                if ui
-                    .button(if editor_state.is_running {
-                        "Stop"
-                    } else {
-                        "Run"
-                    })
-                    .clicked()
-                {
+                let run_text = if editor_state.is_running {
+                    "Stop"
+                } else {
+                    "Run"
+                };
+
+                if ui.button(run_text).clicked() {
                     if !editor_state.is_running {
                         // Compile script before starting
                         if script_engine.compile_script(&editor_state.code).is_ok() {
                             editor_state.is_running = true;
-                            reset_simulation(&mut lander_state, &level);
+                            reset_simulation(&mut lander_state, &current_level);
                         }
                     } else {
                         editor_state.is_running = false;
@@ -136,7 +158,7 @@ pub fn ui_system(
             });
         });
 
-    // Bottom panel for telemetry
+    // Bottom telemetry panel
     egui::TopBottomPanel::bottom("telemetry")
         .min_height(80.0)
         .show(contexts.ctx_mut(), |ui| {
@@ -160,17 +182,19 @@ pub fn ui_system(
                 ui.add_space(20.0);
 
                 // Rotation (only show for thrust vector control)
-                if matches!(level.config.control_scheme, ControlScheme::ThrustVector) {
-                    ui.vertical(|ui| {
-                        ui.label("Rotation:");
-                        ui.label(format!("Angle: {:.1}°", lander_state.rotation.to_degrees()));
-                        ui.label(format!(
-                            "Gimbal: {:.1}°",
-                            lander_state.gimbal_angle.to_degrees()
-                        ));
-                    });
-
-                    ui.add_space(20.0);
+                match current_level.config.control_scheme {
+                    ControlScheme::ThrustVector => {
+                        ui.vertical(|ui| {
+                            ui.label("Rotation:");
+                            ui.label(format!("Angle: {:.1}°", lander_state.rotation.to_degrees()));
+                            ui.label(format!(
+                                "Gimbal: {:.1}°",
+                                lander_state.gimbal_angle.to_degrees()
+                            ));
+                        });
+                        ui.add_space(20.0);
+                    }
+                    _ => {}
                 }
 
                 // Thrust and fuel
@@ -185,34 +209,10 @@ pub fn ui_system(
             });
         });
 
-    // Handle level changes
-    if level_changed {
-        editor_state.is_running = false;
-        script_engine.error_message = None;
-
-        // Load new level
-        *level = CurrentLevel::load(editor_state.current_level);
-
-        // Update script engine control type
-        match level.config.control_scheme {
-            ControlScheme::VerticalOnly => script_engine.set_control_type(ControlType::Simple),
-            ControlScheme::ThrustVector => script_engine.set_control_type(ControlType::Vectored),
-        }
-
-        // Load default script for level
-        editor_state.code = std::fs::read_to_string(format!(
-            "assets/scripts/level{}_default.rhai",
-            editor_state.current_level
-        ))
-        .unwrap_or_else(|_| String::new());
-
-        reset_simulation(&mut lander_state, &level);
-    }
-
     // Handle reset request
     if reset_requested {
         editor_state.is_running = false;
         script_engine.error_message = None;
-        reset_simulation(&mut lander_state, &level);
+        reset_simulation(&mut lander_state, &current_level);
     }
 }

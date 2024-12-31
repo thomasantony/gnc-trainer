@@ -94,6 +94,15 @@ pub fn simulation_system(
         state.thrust_level = new_thrust;
         state.gimbal_angle = new_gimbal;
 
+        // Force thrust to 0 if out of fuel
+        if state.fuel <= 0.0 {
+            state.thrust_level = 0.0;
+            state.gimbal_angle = 0.0;
+        } else {
+            state.thrust_level = new_thrust;
+            state.gimbal_angle = new_gimbal;
+        }
+
         let config = &level.config;
 
         // Calculate current mass

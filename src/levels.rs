@@ -1,4 +1,4 @@
-use bevy::prelude::Resource;
+use bevy::{prelude::Resource, utils::hashbrown::HashMap};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
@@ -42,6 +42,38 @@ pub struct LevelConfig {
     pub success: SuccessCriteria,
     pub control_scheme: ControlScheme,
     pub script_api: Vec<String>,
+}
+
+#[derive(Resource)]
+pub struct LevelManager {
+    pub levels: HashMap<usize, LevelConfig>,
+    pub available_levels: Vec<(usize, String)>, // (level number, name)
+}
+
+impl LevelManager {
+    pub fn load() -> Self {
+        let mut levels = HashMap::new();
+        let mut available_levels = Vec::new();
+
+        // Try loading levels from 1 to 10 (arbitrary limit)
+        for i in 1..=10 {
+            if let Ok(content) = std::fs::read_to_string(format!("assets/levels/level{}.ron", i)) {
+                if let Ok(config) = ron::de::from_str::<LevelConfig>(&content) {
+                    available_levels.push((i, config.name.clone()));
+                    levels.insert(i, config);
+                }
+            }
+        }
+
+        Self {
+            levels,
+            available_levels,
+        }
+    }
+
+    pub fn get_level(&self, number: usize) -> Option<LevelConfig> {
+        self.levels.get(&number).cloned()
+    }
 }
 
 #[derive(Resource)]

@@ -8,7 +8,7 @@ mod simulation;
 mod ui;
 mod visualization;
 
-use levels::CurrentLevel;
+use levels::{CurrentLevel, LevelManager};
 use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState};
 use ui::{ui_system, EditorState};
@@ -27,6 +27,7 @@ fn main() {
         .add_plugins(EguiPlugin)
         .insert_resource(EditorState::default())
         .insert_resource(LanderState::default())
+        .insert_resource(LevelManager::load()) // Load all available levels
         .insert_resource(CurrentLevel::load(1)) // Start with level 1
         .insert_resource(ScriptEngine::default())
         .add_systems(Startup, spawn_visualization)
@@ -44,13 +45,10 @@ fn main() {
 }
 
 fn setup(mut commands: Commands, mut lander_state: ResMut<LanderState>, level: Res<CurrentLevel>) {
-    // Camera setup
     commands.spawn(Camera2d::default());
-
-    // Initialize lander state from level config
     reset_simulation(&mut lander_state, &level);
 }
 
-fn run_simulation(state: Res<EditorState>) -> bool {
-    state.is_running
+fn run_simulation(state: Res<EditorState>, lander_state: Res<LanderState>) -> bool {
+    state.is_running && !lander_state.landed && !lander_state.crashed
 }

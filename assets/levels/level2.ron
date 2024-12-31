@@ -10,9 +10,9 @@
     initial: (
         x0: -30.0,   // start left of target
         y0: 50.0,    // starting altitude
-        vx0: 0.0,    // no initial velocity
+        vx0: 10.0,   // no initial velocity
         vy0: 0.0,
-        r0: 0.0,     // vertical orientation
+        r0: 1.578,     // vertical orientation
         f0: 70.98,   // initial fuel
     ),
     success: (

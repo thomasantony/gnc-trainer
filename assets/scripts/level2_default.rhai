@@ -13,7 +13,7 @@ fn control(state) {
     
     // Constants for the controller
     let GRAVITY = 1.62;      // Lunar gravity (m/s^2)
-    let MAX_DESCENT = 4.0;   // Maximum descent rate (m/s)
+    let MAX_DESCENT = 10.0;   // Maximum descent rate (m/s)
     let MIN_DESCENT = 1.0;   // Minimum descent rate near ground (m/s)
     let GAIN_P = 10.0;        // Proportional gain for velocity control
     let GAIN_D = 10.0;        // Derivative gain for angular velocity
@@ -21,11 +21,13 @@ fn control(state) {
     
     // Calculate desired vertical velocity based on height
     // Linear relationship between height and descent rate
-    let descent_rate = if y > 30.0 {
+    let descent_rate = if y > 50.0 {
         MAX_DESCENT
     } else {
-        MIN_DESCENT + (MAX_DESCENT - MIN_DESCENT) * (y / 20.0)
+        MIN_DESCENT + (MAX_DESCENT - MIN_DESCENT) * (y / 50.0)
     };
+
+	console("Target descent rate: " + descent_rate + " m/s");
     
     // Thrust control based on vertical velocity error
     let vel_error = -vy - descent_rate;  // Convert vy to positive descent rate

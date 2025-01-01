@@ -8,12 +8,10 @@ use rand::Rng;
 
 // Constants for view configuration
 const WORLD_TO_SCREEN_SCALE: f32 = 10.0;
-const VISUALIZATION_WIDTH: f32 = 680.0;
 const RIGHT_PANEL_WIDTH: f32 = 600.0;
 const PARTICLE_LIFETIME: f32 = 0.5;
 const GROUND_OFFSET: f32 = -200.0; // Pixels from center of screen to ground
 const MIN_VIEW_HEIGHT: f32 = 30.0; // Minimum world height (in meters) visible in the view
-const PARTICLE_SPAWN_RATE: f32 = 0.01; // Spawn every 10ms
 const PARTICLE_SIZE: f32 = 2.0; // Smaller particles
 const PARTICLE_BASE_SPEED: f32 = 150.0; // Moderate speed for better visibility
 const PARTICLE_SPREAD: f32 = 0.15; // Spread angle (in radians)
@@ -97,6 +95,39 @@ pub fn spawn_visualization(
     commands.insert_resource(CameraState::default());
     let center_offset = -(RIGHT_PANEL_WIDTH / 2.0);
 
+    // Spawn ground - grey block extending to bottom
+    // Calculate landing zone dimensions and position
+    let landing_zone_width =
+        (level.config.success.x_max - level.config.success.x_min) * WORLD_TO_SCREEN_SCALE;
+    let landing_zone_x =
+        (level.config.success.x_min + level.config.success.x_max) / 2.0 * WORLD_TO_SCREEN_SCALE;
+
+    // Spawn ground - grey block matching landing zone width and position
+    commands.spawn((
+        Sprite {
+            color: Color::srgb(0.3, 0.3, 0.3),
+            custom_size: Some(Vec2::new(landing_zone_width, 200.0)), // Same width as landing zone
+            ..default()
+        },
+        Transform::from_xyz(
+            center_offset + landing_zone_x, // Same x-position as landing zone
+            GROUND_OFFSET - 100.0,          // Centered below ground level
+            0.25,                           // Between background and landing zone
+        ),
+        Ground,
+    ));
+
+    // Spawn landing zone
+    commands.spawn((
+        Sprite {
+            color: Color::srgba(0.0, 0.5, 0.0, 0.3),
+            custom_size: Some(Vec2::new(landing_zone_width, 10.0)),
+            ..default()
+        },
+        Transform::from_xyz(center_offset + landing_zone_x, GROUND_OFFSET + 5.0, 0.5),
+        LandingZone,
+    ));
+
     // Spawn lander
     commands.spawn((
         Mesh2d(meshes.add(create_triangle_mesh())),
@@ -109,47 +140,8 @@ pub fn spawn_visualization(
         Lander,
     ));
 
-    // Spawn ground
-    commands.spawn((
-        Sprite {
-            color: FOREST_GREEN.into(),
-            custom_size: Some(Vec2::new(VISUALIZATION_WIDTH, 2.0)),
-            ..default()
-        },
-        Transform::from_xyz(center_offset, GROUND_OFFSET, 0.0),
-        Ground,
-    ));
-
-    // Spawn landing zone
-    let landing_zone_width =
-        (level.config.success.x_max - level.config.success.x_min) * WORLD_TO_SCREEN_SCALE;
-    let landing_zone_x =
-        (level.config.success.x_min + level.config.success.x_max) / 2.0 * WORLD_TO_SCREEN_SCALE;
-
-    commands.spawn((
-        Sprite {
-            color: Color::srgba(0.0, 1.0, 0.0, 0.3), // Semi-transparent green
-            custom_size: Some(Vec2::new(landing_zone_width, 10.0)),
-            ..default()
-        },
-        Transform::from_xyz(center_offset + landing_zone_x, GROUND_OFFSET + 5.0, 0.5),
-        LandingZone,
-    ));
-
     commands.insert_resource(ParticleSpawnTimer(Timer::from_seconds(
         0.05,
-        TimerMode::Repeating,
-    )));
-
-    commands.spawn((
-        GridSystem,
-        Transform::default(),
-        GlobalTransform::default(),
-        Visibility::default(),
-    ));
-
-    commands.insert_resource(ParticleSpawnTimer(Timer::from_seconds(
-        PARTICLE_SPAWN_RATE,
         TimerMode::Repeating,
     )));
 }
@@ -288,9 +280,15 @@ fn world_to_screen(pos: Vec2, camera_offset: Vec2) -> Vec2 {
 }
 
 pub fn update_visualization(
-    mut lander_query: Query<&mut Transform, With<Lander>>,
-    mut landing_zone_query: Query<&mut Transform, (With<LandingZone>, Without<Lander>)>,
-    mut ground_query: Query<&mut Visibility, With<Ground>>,
+    mut query_set: ParamSet<(
+        Query<&mut Transform, With<Lander>>,
+        Query<(
+            &mut Transform,
+            &Sprite,
+            Option<&LandingZone>,
+            Option<&Ground>,
+        )>,
+    )>,
     mut camera_state: ResMut<CameraState>,
     lander_state: Res<LanderState>,
     level: Res<CurrentLevel>,
@@ -300,33 +298,38 @@ pub fn update_visualization(
     camera_state.target_offset = offset;
 
     // Update lander position
-    if let Ok(mut transform) = lander_query.get_single_mut() {
+    if let Ok(mut transform) = query_set.p0().get_single_mut() {
         let screen_pos = world_to_screen(lander_state.position, offset);
         transform.translation.x = screen_pos.x;
         transform.translation.y = screen_pos.y;
         transform.rotation = Quat::from_rotation_z(lander_state.rotation);
     }
 
-    // Update landing zone position
-    if let Ok(mut transform) = landing_zone_query.get_single_mut() {
-        let landing_zone_pos = Vec2::new(
-            (level.config.success.x_min + level.config.success.x_max) / 2.0,
-            0.0,
-        );
-        let screen_pos = world_to_screen(landing_zone_pos, camera_state.target_offset);
-        transform.translation.x = screen_pos.x;
-        transform.translation.y = screen_pos.y + 5.0;
-    }
-
-    // Update ground visibility
-    if let Ok(mut visibility) = ground_query.get_single_mut() {
-        *visibility = if lander_state.position.y * WORLD_TO_SCREEN_SCALE
-            < MIN_VIEW_HEIGHT * WORLD_TO_SCREEN_SCALE
-        {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
+    // Update ground and landing zone positions
+    let mut ground_query = query_set.p1();
+    for (mut transform, sprite, landing_zone, ground) in ground_query.iter_mut() {
+        if ground.is_some() {
+            // Ground uses same position as landing zone
+            let landing_center = Vec2::new(
+                (level.config.success.x_min + level.config.success.x_max) / 2.0,
+                0.0,
+            );
+            let screen_pos = world_to_screen(landing_center, offset);
+            transform.translation.x = screen_pos.x;
+            // Center the ground block using its height
+            if let Some(size) = sprite.custom_size {
+                transform.translation.y = screen_pos.y - (size.y / 2.0);
+            }
+        } else if landing_zone.is_some() {
+            // Landing zone centered on success zone
+            let landing_zone_pos = Vec2::new(
+                (level.config.success.x_min + level.config.success.x_max) / 2.0,
+                0.0,
+            );
+            let screen_pos = world_to_screen(landing_zone_pos, offset);
+            transform.translation.x = screen_pos.x;
+            transform.translation.y = screen_pos.y + 5.0; // Slight offset to stay above ground
+        }
     }
 }
 

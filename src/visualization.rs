@@ -14,15 +14,18 @@ const GROUND_OFFSET: f32 = -200.0; // Pixels from center of screen to ground
 const MIN_VIEW_HEIGHT: f32 = 30.0; // Minimum world height (in meters) visible in the view
 const PARTICLE_SIZE: f32 = 2.0; // Smaller particles
 const PARTICLE_BASE_SPEED: f32 = 150.0; // Moderate speed for better visibility
-const PARTICLE_SPREAD: f32 = 0.15; // Spread angle (in radians)
+const PARTICLE_SPREAD: f32 = 0.30; // Spread angle (in radians)
 const PARTICLE_COUNT_PER_SPAWN: i32 = 3; // Number of particles to spawn each time
 const PARTICLE_BOUNCE_DAMPING: f32 = 0.1; // How much velocity is retained after bounce
 const PARTICLE_GROUND_Y: f32 = 0.1; // Ground level for particles [m]
+const EXPLOSION_PARTICLE_COUNT: usize = 50;
+const EXPLOSION_PARTICLE_SPEED: f32 = 400.0;
 
 #[derive(Resource)]
 pub struct CameraState {
     pub following: bool,
-    pub target_offset: Vec2, // Changed to Vec2 to track both x and y offsets
+    pub target_offset: Vec2,
+    pub explosion_spawned: bool, // Add this
 }
 
 impl Default for CameraState {
@@ -30,6 +33,7 @@ impl Default for CameraState {
         Self {
             following: true,
             target_offset: Vec2::ZERO,
+            explosion_spawned: false,
         }
     }
 }
@@ -54,9 +58,11 @@ pub struct ExhaustParticle {
 #[derive(Component)]
 pub struct GridSystem;
 
+#[derive(Resource, Default)]
+pub struct ResetVisibilityFlag(pub bool);
+
 const GRID_SPACING: f32 = 10.0; // 10 meter spacing
 
-// Resource to manage particle spawning
 #[derive(Resource)]
 pub struct ParticleSpawnTimer(Timer);
 
@@ -342,7 +348,7 @@ fn spawn_particle(
 ) {
     let mut rng = rand::thread_rng();
     let spread = PARTICLE_SPREAD;
-    let angle_offset = rng.gen_range(-spread..spread) * 2.0;
+    let angle_offset = rng.gen_range(-spread..spread);
     let angle = Vec2::new(
         particle_direction.x * angle_offset.cos() - particle_direction.y * angle_offset.sin(),
         particle_direction.x * angle_offset.sin() + particle_direction.y * angle_offset.cos(),
@@ -377,9 +383,9 @@ pub fn particle_system(
     mut commands: Commands,
     time: Res<Time>,
     mut timer: ResMut<ParticleSpawnTimer>,
-    camera_state: Res<CameraState>,
+    mut camera_state: ResMut<CameraState>,
     mut query_set: ParamSet<(
-        Query<&Transform, With<Lander>>,
+        Query<(Entity, &Transform, &mut Visibility), With<Lander>>,
         Query<(Entity, &mut Transform, &mut ExhaustParticle)>,
     )>,
     lander_state: Res<LanderState>,
@@ -423,6 +429,40 @@ pub fn particle_system(
         commands.entity(entity).despawn();
     }
 
+    // Handle crash explosion
+    if lander_state.crashed && !camera_state.explosion_spawned {
+        let mut lander_query = query_set.p0();
+
+        if let Ok((_entity, lander_transform, mut visibility)) = lander_query.get_single_mut() {
+            // Hide the lander
+            *visibility = Visibility::Hidden;
+
+            let mut rng = rand::thread_rng();
+
+            // Spawn explosion particles in a circle
+            for i in 0..EXPLOSION_PARTICLE_COUNT {
+                let angle = (i as f32 / EXPLOSION_PARTICLE_COUNT as f32) * std::f32::consts::TAU;
+                let direction = Vec2::new(angle.cos(), angle.sin());
+
+                let velocity = EXPLOSION_PARTICLE_SPEED * direction * rng.gen_range(0.8..1.2);
+                // Spawn larger, faster particles for explosion
+                commands.spawn((
+                    Sprite {
+                        color: Color::srgb(1.0, 0.5, 0.0),
+                        custom_size: Some(Vec2::new(4.0, 4.0)),
+                        ..default()
+                    },
+                    Transform::from_translation(lander_transform.translation),
+                    ExhaustParticle {
+                        lifetime: Timer::from_seconds(1.0, TimerMode::Once),
+                        velocity: velocity,
+                        world_pos: lander_state.position,
+                    },
+                ));
+            }
+            camera_state.explosion_spawned = true;
+        }
+    }
     // Spawn new particles
     if lander_state.thrust_level > 0.0 && !lander_state.landed && !lander_state.crashed {
         timer.0.tick(time.delta());
@@ -453,5 +493,17 @@ pub fn particle_system(
                 );
             }
         }
+    }
+}
+
+pub fn reset_lander_visibility(
+    mut lander_query: Query<&mut Visibility, With<Lander>>,
+    mut reset_flag: ResMut<ResetVisibilityFlag>,
+) {
+    if reset_flag.0 {
+        if let Ok(mut visibility) = lander_query.get_single_mut() {
+            *visibility = Visibility::Visible;
+        }
+        reset_flag.0 = false; // This is correct - we want to reset it after handling
     }
 }

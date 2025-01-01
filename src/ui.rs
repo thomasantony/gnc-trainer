@@ -6,7 +6,7 @@ use crate::{
     levels::{ControlScheme, CurrentLevel, LevelManager},
     rhai_api::{ControlType, ScriptEngine},
     simulation::{reset_simulation, LanderState},
-    visualization::CameraState,
+    visualization::{CameraState, ResetVisibilityFlag},
 };
 
 const CONSOLE_HEIGHT: f32 = 500.0;
@@ -45,6 +45,7 @@ pub fn ui_system(
     mut lander_state: ResMut<LanderState>,
     mut current_level: ResMut<CurrentLevel>,
     mut camera_state: ResMut<CameraState>,
+    mut reset_flag: ResMut<ResetVisibilityFlag>,
     level_manager: Res<LevelManager>,
 ) {
     let mut reset_requested = false;
@@ -271,5 +272,6 @@ pub fn ui_system(
         script_engine.error_message = None;
         editor_state.last_console_output.clear(); // Clear console history on reset
         reset_simulation(&mut lander_state, &current_level, &mut camera_state);
+        reset_flag.0 = true; // Set the flag to trigger visibility reset
     }
 }

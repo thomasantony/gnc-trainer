@@ -199,6 +199,7 @@ pub fn reset_simulation(
     camera_state.following = true;
     camera_state.target_offset.x = 0.0;
     camera_state.target_offset.y = 0.0;
+    camera_state.explosion_spawned = false;
 }
 
 // Helper function to calculate mass flow rate based on thrust

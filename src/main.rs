@@ -12,7 +12,9 @@ use levels::{CurrentLevel, LevelManager};
 use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState};
 use ui::{ui_system, EditorState};
-use visualization::{particle_system, spawn_visualization, update_visualization, CameraState};
+use visualization::{
+    particle_system, spawn_visualization, update_grid_lines, update_visualization, CameraState,
+};
 
 fn main() {
     App::new()
@@ -39,7 +41,7 @@ fn main() {
                 ui_system,
                 simulation_system.run_if(run_simulation),
                 // Visualization systems should run unconditionally
-                (update_visualization, particle_system),
+                (update_visualization, update_grid_lines, particle_system),
             ),
         )
         .run();

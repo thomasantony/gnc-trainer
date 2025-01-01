@@ -14,6 +14,11 @@ const PARTICLE_LIFETIME: f32 = 0.5;
 const GROUND_OFFSET: f32 = -200.0; // Pixels from center of screen to ground
 const MIN_VIEW_HEIGHT: f32 = 30.0; // Minimum world height (in meters) visible in the view
 
+const PARTICLE_SPAWN_RATE: f32 = 0.01; // Spawn every 10ms
+const PARTICLE_SIZE: f32 = 2.0; // Smaller particles
+const PARTICLE_BASE_SPEED: f32 = 150.0; // Moderate speed for better visibility
+const PARTICLE_SPREAD: f32 = 0.35; // Narrower spread angle (in radians)
+
 #[derive(Resource)]
 pub struct CameraState {
     pub following: bool,
@@ -34,7 +39,7 @@ impl Default for CameraState {
 pub struct Lander;
 
 #[derive(Component)]
-struct Ground;
+pub struct Ground;
 
 #[derive(Component)]
 pub struct LandingZone;
@@ -44,6 +49,11 @@ pub struct ExhaustParticle {
     lifetime: Timer,
     velocity: Vec2,
 }
+
+#[derive(Component)]
+pub struct GridSystem;
+
+const GRID_SPACING: f32 = 10.0; // 10 meter spacing
 
 // Resource to manage particle spawning
 #[derive(Resource)]
@@ -127,6 +137,112 @@ pub fn spawn_visualization(
         0.05,
         TimerMode::Repeating,
     )));
+
+    commands.spawn((
+        GridSystem,
+        Transform::default(),
+        GlobalTransform::default(),
+        Visibility::default(),
+    ));
+
+    commands.insert_resource(ParticleSpawnTimer(Timer::from_seconds(
+        PARTICLE_SPAWN_RATE,
+        TimerMode::Repeating,
+    )));
+}
+
+// Add new system for updating grid lines
+pub fn update_grid_lines(
+    mut commands: Commands,
+    grid_query: Query<Entity, With<GridSystem>>,
+    camera_state: Res<CameraState>,
+    lander_state: Res<LanderState>,
+) {
+    // Get the grid parent entity, or create one if it doesn't exist
+    let grid_entity = if let Some(entity) = grid_query.iter().next() {
+        // If grid exists, despawn all its children
+        commands.entity(entity).despawn_descendants();
+        entity
+    } else {
+        // Create new grid parent if none exists
+        commands
+            .spawn((
+                GridSystem,
+                Transform::default(),
+                GlobalTransform::default(),
+                Visibility::default(),
+            ))
+            .id()
+    };
+
+    // Work in world coordinates first
+    let view_center = lander_state.position;
+    let num_lines = 10; // Number of grid spacings to extend in each direction from center
+
+    // Calculate world-space bounds centered on spacecraft
+    let line_length = GRID_SPACING * num_lines as f32;
+
+    // Calculate grid line positions in world space
+    let start_x = ((view_center.x - line_length) / GRID_SPACING).floor() * GRID_SPACING;
+    let end_x = ((view_center.x + line_length) / GRID_SPACING).ceil() * GRID_SPACING;
+    let start_y = ((view_center.y - line_length) / GRID_SPACING).floor() * GRID_SPACING;
+    let end_y = ((view_center.y + line_length) / GRID_SPACING).ceil() * GRID_SPACING;
+
+    // Calculate world height for vertical lines (based on lander position)
+    let vertical_world_height = line_length * 2.0; // Same scale as width
+    let vertical_screen_height = vertical_world_height * WORLD_TO_SCREEN_SCALE;
+
+    // Calculate world width for horizontal lines (based on lander position)
+    let horizontal_world_width = line_length * 2.0;
+    let horizontal_screen_width = horizontal_world_width * WORLD_TO_SCREEN_SCALE;
+
+    // Spawn vertical lines
+    let mut x = start_x;
+    while x <= end_x {
+        // Convert world X to screen X
+        let screen_pos = world_to_screen(
+            Vec2::new(x, lander_state.position.y),
+            camera_state.target_offset,
+        );
+
+        commands
+            .spawn((
+                Sprite {
+                    color: Color::srgba(0.5, 0.5, 0.5, 0.2),
+                    custom_size: Some(Vec2::new(1.0, vertical_screen_height)),
+                    ..default()
+                },
+                Transform::from_xyz(screen_pos.x, screen_pos.y, 0.1),
+                GlobalTransform::default(),
+                Visibility::default(),
+                GridSystem,
+            ))
+            .set_parent(grid_entity);
+        x += GRID_SPACING;
+    }
+
+    // Spawn horizontal lines
+    let mut y = start_y;
+    while y <= end_y {
+        let screen_pos = world_to_screen(
+            Vec2::new(lander_state.position.x, y),
+            camera_state.target_offset,
+        );
+        commands
+            .spawn((
+                Sprite {
+                    color: Color::srgba(0.5, 0.5, 0.5, 0.2),
+                    custom_size: Some(Vec2::new(horizontal_screen_width, 1.0)),
+                    ..default()
+                },
+                Transform::from_xyz(screen_pos.x, screen_pos.y, 0.1),
+                GlobalTransform::default(),
+                Visibility::default(),
+                GridSystem,
+            ))
+            .set_parent(grid_entity);
+        y += GRID_SPACING;
+    }
 }
 
 fn calculate_view_offset(lander_pos: Vec2) -> Vec2 {
@@ -171,6 +287,7 @@ fn world_to_screen(pos: Vec2, camera_offset: Vec2) -> Vec2 {
 pub fn update_visualization(
     mut lander_query: Query<&mut Transform, With<Lander>>,
     mut landing_zone_query: Query<&mut Transform, (With<LandingZone>, Without<Lander>)>,
+    mut ground_query: Query<&mut Visibility, With<Ground>>,
     mut camera_state: ResMut<CameraState>,
     lander_state: Res<LanderState>,
     level: Res<CurrentLevel>,
@@ -179,6 +296,7 @@ pub fn update_visualization(
     let offset = calculate_view_offset(lander_state.position);
     camera_state.target_offset = offset;
 
+    // Update lander position
     if let Ok(mut transform) = lander_query.get_single_mut() {
         let screen_pos = world_to_screen(lander_state.position, offset);
         transform.translation.x = screen_pos.x;
@@ -186,43 +304,61 @@ pub fn update_visualization(
         transform.rotation = Quat::from_rotation_z(lander_state.rotation);
     }
 
+    // Update landing zone position
     if let Ok(mut transform) = landing_zone_query.get_single_mut() {
         let landing_zone_pos = Vec2::new(
             (level.config.success.x_min + level.config.success.x_max) / 2.0,
-            0.0, // Ground level
+            0.0,
         );
         let screen_pos = world_to_screen(landing_zone_pos, camera_state.target_offset);
         transform.translation.x = screen_pos.x;
-        transform.translation.y = screen_pos.y + 5.0; // Slight offset from ground
+        transform.translation.y = screen_pos.y + 5.0;
+    }
+
+    // Update ground visibility
+    if let Ok(mut visibility) = ground_query.get_single_mut() {
+        *visibility = if lander_state.position.y * WORLD_TO_SCREEN_SCALE
+            < MIN_VIEW_HEIGHT * WORLD_TO_SCREEN_SCALE
+        {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
     }
 }
 
 fn spawn_particle(
     commands: &mut Commands,
-    lander_pos: Vec3,
+    lander_pos: Vec2,
     base_position: Vec2,
     particle_direction: Vec2,
+    camera_offset: Vec2,
 ) {
     let mut rng = rand::thread_rng();
-    let spread = 0.2; // Spread angle in radians
-    let angle = particle_direction + rng.gen_range(-spread..spread);
-    let speed = 100.0 * rng.gen_range(0.8..1.2); // Pixels per second, with some variation
-
-    let offset = Vec2::new(
-        base_position.x + rng.gen_range(-3.0..3.0),
-        base_position.y + rng.gen_range(-3.0..3.0),
+    let spread = PARTICLE_SPREAD;
+    let angle_offset = rng.gen_range(-spread..spread);
+    let angle = Vec2::new(
+        particle_direction.x * angle_offset.cos() - particle_direction.y * angle_offset.sin(),
+        particle_direction.x * angle_offset.sin() + particle_direction.y * angle_offset.cos(),
     );
+    let speed = PARTICLE_BASE_SPEED * rng.gen_range(0.8..1.2);
+
+    // Smaller spread at emission point
+    let offset = Vec2::new(rng.gen_range(-0.2..0.2), rng.gen_range(0.0..0.5));
+
+    // Calculate screen position accounting for camera offset once
+    let screen_pos = world_to_screen(lander_pos + base_position + offset, camera_offset);
 
     commands.spawn((
         Sprite {
             color: ORANGE_RED.into(),
-            custom_size: Some(Vec2::new(2.0, 2.0)),
+            custom_size: Some(Vec2::new(PARTICLE_SIZE, PARTICLE_SIZE)),
             ..default()
         },
-        Transform::from_xyz(lander_pos.x + offset.x, lander_pos.y + offset.y, 0.5),
+        Transform::from_xyz(screen_pos.x, screen_pos.y, 0.5),
         ExhaustParticle {
             lifetime: Timer::from_seconds(PARTICLE_LIFETIME, TimerMode::Once),
-            velocity: (particle_direction + angle) * speed,
+            velocity: angle * speed,
         },
     ));
 }
@@ -238,7 +374,7 @@ pub fn particle_system(
     )>,
     lander_state: Res<LanderState>,
 ) {
-    // Update existing particles with the camera offset
+    // Update existing particles
     let mut to_despawn = Vec::new();
     {
         let mut particle_query = query_set.p1();
@@ -247,11 +383,9 @@ pub fn particle_system(
             if particle.lifetime.finished() {
                 to_despawn.push(entity);
             } else {
+                // Update position based on velocity
                 transform.translation.x += particle.velocity.x * time.delta_secs();
                 transform.translation.y += particle.velocity.y * time.delta_secs();
-                // Adjust particle position for camera movement
-                transform.translation.x -= camera_state.target_offset.x;
-                transform.translation.y -= camera_state.target_offset.y;
             }
         }
     }
@@ -261,33 +395,33 @@ pub fn particle_system(
         commands.entity(entity).despawn();
     }
 
+    // Spawn new particles
     if lander_state.thrust_level > 0.0 && !lander_state.landed && !lander_state.crashed {
         timer.0.tick(time.delta());
         if timer.0.just_finished() {
-            let lander_query = query_set.p0();
-            if let Ok(lander_transform) = lander_query.get_single() {
-                let num_particles = (lander_state.thrust_level * 3.0) as i32;
+            let num_particles = (lander_state.thrust_level * 5.0) as i32; // More particles
 
-                // When rotation is 0 (pointing up):
-                //   - particles should come out the bottom
-                //   - gimbal rotates this direction
-                let exhaust_direction_angle =
-                    lander_state.rotation + lander_state.gimbal_angle - std::f32::consts::FRAC_PI_2;
+            // When rotation is 0 (pointing up):
+            //   - particles should come out the bottom
+            //   - gimbal rotates this direction
+            let exhaust_angle =
+                lander_state.rotation + lander_state.gimbal_angle + std::f32::consts::FRAC_PI_2;
+            let exhaust_direction = -Vec2::new(exhaust_angle.cos(), exhaust_angle.sin());
 
-                // Spawn position should be at the base of the triangle
-                let exhaust_direction =
-                    Vec2::new(exhaust_direction_angle.cos(), exhaust_direction_angle.sin());
-                let exhaust_offset =
-                    exhaust_direction * LANDER_HEIGHT * 0.5 * WORLD_TO_SCREEN_SCALE;
+            // Calculate base position (at the bottom of the lander)
+            let base_offset = Vec2::new(
+                lander_state.rotation.sin() * LANDER_HEIGHT / 2.0,
+                -lander_state.rotation.cos() * LANDER_HEIGHT / 2.0,
+            );
 
-                for _ in 0..num_particles {
-                    spawn_particle(
-                        &mut commands,
-                        lander_transform.translation,
-                        exhaust_offset,
-                        exhaust_direction,
-                    );
-                }
+            for _ in 0..num_particles {
+                spawn_particle(
+                    &mut commands,
+                    lander_state.position,
+                    base_offset,
+                    exhaust_direction,
+                    camera_state.target_offset,
+                );
             }
         }
     }

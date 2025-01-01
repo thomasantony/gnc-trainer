@@ -12,13 +12,25 @@ use crate::{
 pub struct EditorState {
     pub code: String,
     pub is_running: bool,
+    pub console_height: f32, // Height of console panel
 }
 
 impl Default for EditorState {
     fn default() -> Self {
         Self {
-            code: include_str!("../assets/scripts/level1_default.rhai").into(),
+            // Default script now includes function definition
+            code: r#"fn control(state) {
+    // Your control code here
+    // Example: hover at 10 meters
+    if state["y"] < 10.0 {
+        simple_control(1.0)
+    } else {
+        simple_control(0.0)
+    }
+}"#
+            .into(),
             is_running: false,
+            console_height: 150.0, // Default console height
         }
     }
 }
@@ -122,6 +134,17 @@ pub fn ui_system(
                 .show(ui, &mut editor_state.code);
 
             ui.add_space(8.0);
+
+            // Console output
+            ui.label("Console Output");
+            egui::ScrollArea::vertical()
+                .max_height(editor_state.console_height)
+                .show(ui, |ui| {
+                    let console_output = script_engine.take_console_output();
+                    for line in console_output {
+                        ui.label(line);
+                    }
+                });
 
             // Status messages
             if let Some(error) = &script_engine.error_message {

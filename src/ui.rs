@@ -30,7 +30,6 @@ fn control(state) {
     // P controller
     let k_p = 10.0;
     0.5 - k_p * error
-}
 }"#
             .into(),
             is_running: false,

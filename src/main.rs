@@ -3,18 +3,20 @@ use bevy_egui::EguiPlugin;
 
 mod constants;
 mod levels;
+mod particles; // New module
 mod rhai_api;
 mod simulation;
 mod ui;
 mod visualization;
 
 use levels::{CurrentLevel, LevelManager};
+use particles::{particle_system, ParticleSpawnTimer}; // New imports
 use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState};
 use ui::{ui_system, EditorState, SimulationState};
 use visualization::{
-    particle_system, reset_lander_visibility, spawn_visualization, update_grid_lines,
-    update_visualization, CameraState, ResetVisibilityFlag,
+    reset_lander_visibility, spawn_visualization, update_grid_lines, update_visualization,
+    CameraState, ResetVisibilityFlag,
 };
 
 fn main() {
@@ -30,11 +32,15 @@ fn main() {
         .add_plugins(EguiPlugin)
         .insert_resource(EditorState::default())
         .insert_resource(LanderState::default())
-        .insert_resource(LevelManager::load()) // Load all available levels
-        .insert_resource(CurrentLevel::load(1)) // Start with level 1
+        .insert_resource(LevelManager::load())
+        .insert_resource(CurrentLevel::load(1))
         .insert_resource(ScriptEngine::default())
         .insert_resource(visualization::CameraState::default())
         .insert_resource(ResetVisibilityFlag::default())
+        .insert_resource(ParticleSpawnTimer(Timer::from_seconds(
+            0.05,
+            TimerMode::Repeating,
+        ))) // Add particle timer
         .add_systems(Startup, spawn_visualization)
         .add_systems(Startup, setup)
         .add_systems(
@@ -42,11 +48,10 @@ fn main() {
             (
                 ui_system,
                 simulation_system.run_if(run_simulation),
-                // Visualization systems should run unconditionally
                 (
                     update_visualization,
                     update_grid_lines,
-                    particle_system,
+                    particle_system, // Keep particle system
                     reset_lander_visibility,
                 ),
             ),

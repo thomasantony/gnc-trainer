@@ -41,7 +41,6 @@ pub struct LevelConfig {
     pub initial: InitialState,
     pub success: SuccessCriteria,
     pub control_scheme: ControlScheme,
-    pub script_api: Vec<String>,
 }
 
 #[derive(Resource)]

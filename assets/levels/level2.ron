@@ -22,12 +22,4 @@
         x_max: 100000.0,
     ),
     control_scheme: ThrustVector,
-    script_api: [
-        "x",
-        "y",
-        "vx",
-        "vy",
-        "rotation",
-        "fuel",
-    ],
 )

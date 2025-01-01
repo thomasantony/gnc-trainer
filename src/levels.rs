@@ -9,28 +9,31 @@ pub enum ControlScheme {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Physics {
-    pub g: f32,   // gravity
-    pub m: f32,   // dry mass
-    pub t: f32,   // max thrust
-    pub isp: f32, // specific impulse
+    pub gravity: f32,    // gravity acceleration (m/s²)
+    pub dry_mass: f32,   // dry mass of the lander (kg)
+    pub max_thrust: f32, // maximum thrust force (N)
+    pub isp: f32,        // specific impulse (s)
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct InitialState {
-    pub x0: f32,  // initial horizontal position
-    pub y0: f32,  // initial altitude
-    pub vx0: f32, // initial horizontal velocity
-    pub vy0: f32, // initial vertical velocity
-    pub r0: f32,  // initial rotation (radians)
-    pub f0: f32,  // initial fuel
+    pub x0: f32,            // initial horizontal position
+    pub y0: f32,            // initial altitude
+    pub vx0: f32,           // initial horizontal velocity
+    pub vy0: f32,           // initial vertical velocity
+    pub initial_angle: f32, // initial rotation (radians)
+    pub initial_fuel: f32,  // initial fuel mass (kg)
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SuccessCriteria {
-    pub vx_max: f32, // max horizontal velocity
-    pub vy_max: f32, // max vertical velocity
-    pub x_min: f32,  // landing zone left boundary
-    pub x_max: f32,  // landing zone right boundary
+    pub vx_max: f32,             // max horizontal velocity
+    pub vy_max: f32,             // max vertical velocity
+    pub x_min: f32,              // landing zone left boundary
+    pub x_max: f32,              // landing zone right boundary
+    pub final_angle: f32,        // desired final angle (radians)
+    pub angle_tolerance: f32,    // acceptable deviation from final angle (radians)
+    pub persistence_period: f32, // time criteria must be met (seconds)
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -41,6 +44,7 @@ pub struct LevelConfig {
     pub initial: InitialState,
     pub success: SuccessCriteria,
     pub control_scheme: ControlScheme,
+    pub success_message: String,
 }
 
 #[derive(Resource)]

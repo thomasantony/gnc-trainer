@@ -8,11 +8,16 @@ use crate::visualization::{world_to_screen, CameraState};
 const PARTICLE_LIFETIME: f32 = 0.5;
 const PARTICLE_SIZE: f32 = 2.0;
 const PARTICLE_BASE_SPEED: f32 = 150.0;
-const PARTICLE_SPREAD: f32 = 0.15; // Spread angle (in radians)
-const PARTICLE_COUNT_PER_SPAWN: i32 = 3;
+const PARTICLE_SPREAD: f32 = 0.30; // Spread angle (in radians)
+const PARTICLE_COUNT_PER_SPAWN: i32 = 10;
 const PARTICLE_BOUNCE_DAMPING: f32 = 0.1;
 const PARTICLE_GROUND_Y: f32 = 0.1;
 const LANDER_HEIGHT: f32 = 3.0; // Duplicated from constants.rs for particle positioning
+
+const EXPLOSION_PARTICLE_COUNT_MIN: usize = 100;
+const EXPLOSION_PARTICLE_COUNT_MAX: usize = 200;
+const EXPLOSION_PARTICLE_SPEED: f32 = 200.0;
+const EXPLOSION_PARTICLE_SPREAD: f32 = 0.25;
 
 #[derive(Component)]
 pub struct ExhaustParticle {
@@ -33,7 +38,7 @@ fn spawn_particle(
 ) {
     let mut rng = rand::thread_rng();
     let spread = PARTICLE_SPREAD;
-    let angle_offset = rng.gen_range(-spread..spread) * 2.0;
+    let angle_offset = rng.gen_range(-spread..spread);
     let angle = Vec2::new(
         particle_direction.x * angle_offset.cos() - particle_direction.y * angle_offset.sin(),
         particle_direction.x * angle_offset.sin() + particle_direction.y * angle_offset.cos(),
@@ -60,10 +65,25 @@ fn spawn_particle(
 }
 
 // Make something Rico would appreciate
-pub fn kaboom(commands: &mut Commands, lander_pos: Vec2, lander_transform: &Transform) {
-    for i in 0..20 {
-        let angle = (i as f32 / 20.0) * std::f32::consts::TAU;
+pub fn kaboom(
+    commands: &mut Commands,
+    lander_pos: Vec2,
+    lander_vel: Vec2,
+    lander_transform: &Transform,
+) {
+    let mut rng = rand::thread_rng();
+
+    let particle_count = rng.gen_range(EXPLOSION_PARTICLE_COUNT_MIN..EXPLOSION_PARTICLE_COUNT_MAX);
+    for i in 0..particle_count {
+        let angle = (i as f32 / particle_count as f32) * std::f32::consts::TAU;
+        let angle_offset = rng.gen_range(-EXPLOSION_PARTICLE_SPREAD..EXPLOSION_PARTICLE_SPREAD);
+
         let direction = Vec2::new(angle.cos(), angle.sin());
+        let direction = Vec2::new(
+            direction.x * angle_offset.cos() - direction.y * angle_offset.sin(),
+            direction.x * angle_offset.sin() + direction.y * angle_offset.cos(),
+        );
+        let velocity = EXPLOSION_PARTICLE_SPEED * direction * rng.gen_range(0.8..1.2);
 
         commands.spawn((
             Sprite {
@@ -74,7 +94,7 @@ pub fn kaboom(commands: &mut Commands, lander_pos: Vec2, lander_transform: &Tran
             Transform::from_translation(lander_transform.translation),
             ExhaustParticle {
                 lifetime: Timer::from_seconds(1.0, TimerMode::Once),
-                velocity: direction * 200.0,
+                velocity: velocity + lander_vel,
                 world_pos: lander_pos,
             },
         ));
@@ -131,7 +151,12 @@ pub fn particle_system(
         let mut lander_query = query_set.p0();
         if let Ok((_entity, lander_transform, mut visibility)) = lander_query.get_single_mut() {
             *visibility = Visibility::Hidden;
-            kaboom(&mut commands, lander_state.position, lander_transform);
+            kaboom(
+                &mut commands,
+                lander_state.position,
+                lander_state.velocity,
+                lander_transform,
+            );
             camera_state.explosion_spawned = true;
         }
     }

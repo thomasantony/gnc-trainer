@@ -19,14 +19,31 @@ impl Default for EditorState {
     fn default() -> Self {
         Self {
             // Default script now includes function definition
-            code: r#"fn control(state) {
-    // Your control code here
-    // Example: hover at 10 meters
-    if state["y"] < 10.0 {
-        simple_control(1.0)
-    } else {
-        simple_control(0.0)
+            code: r#"// Example hover script
+fn pid(target, current, kp, ki, kd) {
+    // Initialize PID state if not exists
+    if user_state["integral"] == () {
+        user_state["integral"] = 0.0;
+        user_state["last_error"] = 0.0;
     }
+
+    let error = target - current;
+    user_state["integral"] += error * 0.016; // Assume fixed dt for now
+    let derivative = (error - user_state["last_error"]) / 0.016;
+    user_state["last_error"] = error;
+
+    kp * error + ki * user_state["integral"] + kd * derivative
+}
+
+fn control(state) {
+    print("Height: " + state["y"]);
+    print("Speed: " + state["vy"]);
+    
+    // Use PID to maintain 10m altitude
+    let thrust = pid(10.0, state["y"], 0.1, 0.01, 0.05);
+    
+    // Just return the thrust value (between 0 and 1)
+    thrust.clamp(0.0, 1.0)
 }"#
             .into(),
             is_running: false,

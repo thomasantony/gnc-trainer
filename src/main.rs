@@ -12,7 +12,7 @@ use levels::{CurrentLevel, LevelManager};
 use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState};
 use ui::{ui_system, EditorState};
-use visualization::{particle_system, spawn_visualization, update_visualization};
+use visualization::{particle_system, spawn_visualization, update_visualization, CameraState};
 
 fn main() {
     App::new()
@@ -30,6 +30,7 @@ fn main() {
         .insert_resource(LevelManager::load()) // Load all available levels
         .insert_resource(CurrentLevel::load(1)) // Start with level 1
         .insert_resource(ScriptEngine::default())
+        .insert_resource(visualization::CameraState::default())
         .add_systems(Startup, spawn_visualization)
         .add_systems(Startup, setup)
         .add_systems(
@@ -37,16 +38,21 @@ fn main() {
             (
                 ui_system,
                 simulation_system.run_if(run_simulation),
-                update_visualization,
-                particle_system,
+                // Visualization systems should run unconditionally
+                (update_visualization, particle_system),
             ),
         )
         .run();
 }
 
-fn setup(mut commands: Commands, mut lander_state: ResMut<LanderState>, level: Res<CurrentLevel>) {
+fn setup(
+    mut commands: Commands,
+    mut lander_state: ResMut<LanderState>,
+    level: Res<CurrentLevel>,
+    mut camera_state: ResMut<CameraState>,
+) {
     commands.spawn(Camera2d::default());
-    reset_simulation(&mut lander_state, &level);
+    reset_simulation(&mut lander_state, &level, &mut camera_state);
 }
 
 fn run_simulation(state: Res<EditorState>, lander_state: Res<LanderState>) -> bool {

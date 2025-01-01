@@ -4,6 +4,7 @@ use crate::{
     constants::LANDER_BASE_OFFSET,
     levels::CurrentLevel,
     rhai_api::{ControlOutput, LanderState as ScriptLanderState, ScriptEngine},
+    visualization::CameraState,
 };
 
 // Control limits
@@ -177,7 +178,11 @@ pub fn simulation_system(
     }
 }
 
-pub fn reset_simulation(state: &mut LanderState, level: &CurrentLevel) {
+pub fn reset_simulation(
+    state: &mut LanderState,
+    level: &CurrentLevel,
+    camera_state: &mut CameraState,
+) {
     *state = LanderState {
         position: Vec2::new(level.config.initial.x0, level.config.initial.y0),
         velocity: Vec2::new(level.config.initial.vx0, level.config.initial.vy0),
@@ -189,6 +194,11 @@ pub fn reset_simulation(state: &mut LanderState, level: &CurrentLevel) {
         crashed: false,
         landed: false,
     };
+
+    // Reset camera to following state
+    camera_state.following = true;
+    camera_state.target_offset.x = 0.0;
+    camera_state.target_offset.y = 0.0;
 }
 
 // Helper function to calculate mass flow rate based on thrust

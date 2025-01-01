@@ -20,30 +20,15 @@ impl Default for EditorState {
         Self {
             // Default script now includes function definition
             code: r#"// Example hover script
-fn pid(target, current, kp, ki, kd) {
-    // Initialize PID state if not exists
-    if user_state["integral"] == () {
-        user_state["integral"] = 0.0;
-        user_state["last_error"] = 0.0;
-    }
-
-    let error = target - current;
-    user_state["integral"] += error * 0.016; // Assume fixed dt for now
-    let derivative = (error - user_state["last_error"]) / 0.016;
-    user_state["last_error"] = error;
-
-    kp * error + ki * user_state["integral"] + kd * derivative
-}
-
 fn control(state) {
-    print("Height: " + state["y"]);
-    print("Speed: " + state["vy"]);
-    
-    // Use PID to maintain 10m altitude
-    let thrust = pid(10.0, state["y"], 0.1, 0.01, 0.05);
-    
-    // Just return the thrust value (between 0 and 1)
-    thrust.clamp(0.0, 1.0)
+    // Simple vertical-only control script
+    let target_velocity = if state["y"] > 10.0 { -5.0 } else { -1.0 };
+    let error = state["vy"] - target_velocity;
+
+    // P controller
+    let k_p = 10.0;
+    0.5 - k_p * error
+}
 }"#
             .into(),
             is_running: false,
@@ -159,7 +144,7 @@ pub fn ui_system(
                 .show(ui, |ui| {
                     let console_output = script_engine.take_console_output();
                     for line in console_output {
-                        ui.label(line);
+                        ui.colored_label(egui::Color32::GREEN, line.clone());
                     }
                 });
 

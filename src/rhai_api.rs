@@ -50,13 +50,17 @@ impl Default for ScriptEngine {
     fn default() -> Self {
         let mut engine = Engine::new();
 
-        // Register print function
-        let print_fn = move |text: &str| {
+        // Register console function that can handle any type
+        let console_fn = move |x: Dynamic| {
+            let text = x.to_string();
+            // Add text directly to console buffer
             CONSOLE_BUFFER.with(|buffer| {
-                buffer.borrow_mut().push(text.to_string());
+                buffer.borrow_mut().push(text);
             });
+            // Return () to satisfy Rhai
+            Dynamic::UNIT
         };
-        engine.register_fn("print", print_fn);
+        engine.register_fn("console", console_fn);
 
         // Disable unsafe operations
         engine.set_max_expr_depths(64, 64);
@@ -103,7 +107,10 @@ impl ScriptEngine {
     pub fn calculate_control(&mut self, state: LanderState) -> Option<ControlOutput> {
         if let Some(ast) = &self.compiled_script {
             // Clear console buffer for this execution
-            CONSOLE_BUFFER.with(|buffer| buffer.borrow_mut().clear());
+            CONSOLE_BUFFER.with(|buffer| {
+                buffer.borrow_mut().clear();
+            });
+            self.console_buffer.clear(); // Also clear the engine's buffer
 
             // Create state map
             let mut map = RhaiMap::new();
@@ -135,9 +142,10 @@ impl ScriptEngine {
                         .call_fn::<Dynamic>(&mut scope, ast, "control", (map,))
                     {
                         Ok(result) => {
-                            // Get console output
+                            // Get console output and clear thread local buffer
                             CONSOLE_BUFFER.with(|buffer| {
-                                self.console_buffer.extend(buffer.borrow().iter().cloned());
+                                let mut buffer = buffer.borrow_mut();
+                                self.console_buffer.extend(buffer.drain(..));
                             });
 
                             // Extract updated user_state

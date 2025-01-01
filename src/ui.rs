@@ -11,30 +11,29 @@ use crate::{
 
 const CONSOLE_HEIGHT: f32 = 500.0;
 
+#[derive(Default, PartialEq)]
+pub enum SimulationState {
+    #[default]
+    Stopped,
+    Running,
+    Paused,
+}
+
 #[derive(Resource)]
 pub struct EditorState {
     pub code: String,
-    pub is_running: bool,
-    pub console_height: f32, // Height of console panel
+    pub simulation_state: SimulationState,
+    pub console_height: f32,
+    pub last_console_output: Vec<String>, // Store persistent console history
 }
 
 impl Default for EditorState {
     fn default() -> Self {
         Self {
-            // Default script now includes function definition
-            code: r#"// Example hover script
-fn control(state) {
-    // Simple vertical-only control script
-    let target_velocity = if state["y"] > 10.0 { -5.0 } else { -1.0 };
-    let error = state["vy"] - target_velocity;
-
-    // P controller
-    let k_p = 10.0;
-    0.5 - k_p * error
-}"#
-            .into(),
-            is_running: false,
-            console_height: 150.0, // Default console height
+            code: include_str!("../assets/scripts/hover.rhai").into(),
+            simulation_state: SimulationState::Stopped,
+            console_height: 150.0,
+            last_console_output: Vec::new(),
         }
     }
 }
@@ -68,8 +67,9 @@ pub fn ui_system(
     // Handle level selection
     if let Some(level_num) = new_level_number {
         if let Some(new_config) = level_manager.get_level(level_num) {
-            editor_state.is_running = false;
+            editor_state.simulation_state = SimulationState::Stopped;
             script_engine.error_message = None;
+            editor_state.last_console_output.clear(); // Clear console history on level change
 
             // Update current level
             current_level.config = new_config.clone();
@@ -151,9 +151,17 @@ pub fn ui_system(
                 .id_salt(1234)
                 .max_height(editor_state.console_height)
                 .show(ui, |ui| {
-                    let console_output = script_engine.take_console_output();
-                    for line in console_output {
-                        ui.colored_label(egui::Color32::GREEN, line.clone());
+                    // Only update the console output if we get new messages
+                    if editor_state.simulation_state == SimulationState::Running {
+                        let new_output = script_engine.take_console_output();
+                        if !new_output.is_empty() {
+                            editor_state.last_console_output = new_output;
+                        }
+                    }
+
+                    // Display the last set of messages
+                    for line in &editor_state.last_console_output {
+                        ui.colored_label(egui::Color32::GREEN, line);
                     }
                 });
 
@@ -168,21 +176,35 @@ pub fn ui_system(
 
             // Control buttons
             ui.horizontal(|ui| {
-                let run_text = if editor_state.is_running {
-                    "Stop"
-                } else {
-                    "Run"
+                let (button_text, next_state) = match editor_state.simulation_state {
+                    SimulationState::Stopped => ("Run", SimulationState::Running),
+                    SimulationState::Running => ("Pause", SimulationState::Paused),
+                    SimulationState::Paused => ("Resume", SimulationState::Running),
                 };
 
-                if ui.button(run_text).clicked() {
-                    if !editor_state.is_running {
-                        // Compile script before starting
-                        if script_engine.compile_script(&editor_state.code).is_ok() {
-                            editor_state.is_running = true;
-                            reset_simulation(&mut lander_state, &current_level, &mut camera_state);
+                if ui.button(button_text).clicked() {
+                    match editor_state.simulation_state {
+                        SimulationState::Stopped => {
+                            // Starting from stopped state - compile and reset
+                            if script_engine.compile_script(&editor_state.code).is_ok() {
+                                reset_simulation(
+                                    &mut lander_state,
+                                    &current_level,
+                                    &mut camera_state,
+                                );
+                                editor_state.simulation_state = next_state;
+                            }
                         }
-                    } else {
-                        editor_state.is_running = false;
+                        SimulationState::Running => {
+                            // Pause the simulation
+                            editor_state.simulation_state = next_state;
+                        }
+                        SimulationState::Paused => {
+                            // Resume from pause - recompile script but don't reset
+                            if script_engine.compile_script(&editor_state.code).is_ok() {
+                                editor_state.simulation_state = next_state;
+                            }
+                        }
                     }
                 }
 
@@ -245,8 +267,9 @@ pub fn ui_system(
 
     // Handle reset request
     if reset_requested {
-        editor_state.is_running = false;
+        editor_state.simulation_state = SimulationState::Stopped;
         script_engine.error_message = None;
+        editor_state.last_console_output.clear(); // Clear console history on reset
         reset_simulation(&mut lander_state, &current_level, &mut camera_state);
     }
 }

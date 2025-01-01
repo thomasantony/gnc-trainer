@@ -11,7 +11,7 @@ mod visualization;
 use levels::{CurrentLevel, LevelManager};
 use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState};
-use ui::{ui_system, EditorState};
+use ui::{ui_system, EditorState, SimulationState};
 use visualization::{
     particle_system, spawn_visualization, update_grid_lines, update_visualization, CameraState,
 };
@@ -58,5 +58,7 @@ fn setup(
 }
 
 fn run_simulation(state: Res<EditorState>, lander_state: Res<LanderState>) -> bool {
-    state.is_running && !lander_state.landed && !lander_state.crashed
+    state.simulation_state == SimulationState::Running
+        && !lander_state.landed
+        && !lander_state.crashed
 }

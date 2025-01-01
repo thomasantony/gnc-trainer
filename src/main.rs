@@ -13,7 +13,8 @@ use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState};
 use ui::{ui_system, EditorState, SimulationState};
 use visualization::{
-    particle_system, spawn_visualization, update_grid_lines, update_visualization, CameraState,
+    particle_system, reset_lander_visibility, spawn_visualization, update_grid_lines,
+    update_visualization, CameraState, ResetVisibilityFlag,
 };
 
 fn main() {
@@ -33,6 +34,7 @@ fn main() {
         .insert_resource(CurrentLevel::load(1)) // Start with level 1
         .insert_resource(ScriptEngine::default())
         .insert_resource(visualization::CameraState::default())
+        .insert_resource(ResetVisibilityFlag::default())
         .add_systems(Startup, spawn_visualization)
         .add_systems(Startup, setup)
         .add_systems(
@@ -41,7 +43,12 @@ fn main() {
                 ui_system,
                 simulation_system.run_if(run_simulation),
                 // Visualization systems should run unconditionally
-                (update_visualization, update_grid_lines, particle_system),
+                (
+                    update_visualization,
+                    update_grid_lines,
+                    particle_system,
+                    reset_lander_visibility,
+                ),
             ),
         )
         .run();

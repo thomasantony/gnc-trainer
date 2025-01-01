@@ -1,5 +1,5 @@
 use crate::constants::{LANDER_HEIGHT, LANDER_WIDTH};
-use crate::levels::CurrentLevel;
+use crate::levels::{CurrentLevel, Reference};
 use crate::simulation::LanderState;
 use bevy::asset::RenderAssetUsages;
 use bevy::color::palettes::css::*;
@@ -15,7 +15,7 @@ const MIN_VIEW_HEIGHT: f32 = 30.0; // Minimum world height (in meters) visible i
 pub struct CameraState {
     pub following: bool,
     pub target_offset: Vec2,
-    pub explosion_spawned: bool, // Add this
+    pub explosion_spawned: bool,
 }
 
 impl Default for CameraState {
@@ -36,7 +36,7 @@ pub struct Lander;
 pub struct Ground;
 
 #[derive(Component)]
-pub struct LandingZone;
+pub struct TargetZone;
 
 #[derive(Component)]
 pub struct GridSystem;
@@ -80,39 +80,97 @@ pub fn spawn_visualization(
 ) {
     commands.insert_resource(CameraState::default());
     let center_offset = -(RIGHT_PANEL_WIDTH / 2.0);
+    let config = &level.config;
+    let initial_pos = Vec2::new(config.initial.x0, config.initial.y0);
 
-    // Spawn ground - grey block extending to bottom
-    // Calculate landing zone dimensions and position
-    let landing_zone_width =
-        (level.config.success.x_max - level.config.success.x_min) * WORLD_TO_SCREEN_SCALE;
-    let landing_zone_x =
-        (level.config.success.x_min + level.config.success.x_max) / 2.0 * WORLD_TO_SCREEN_SCALE;
-
-    // Spawn ground - grey block matching landing zone width and position
+    // Spawn ground that extends beyond view
+    let ground_width = 10000.0;
     commands.spawn((
         Sprite {
             color: Color::srgb(0.3, 0.3, 0.3),
-            custom_size: Some(Vec2::new(landing_zone_width, 200.0)), // Same width as landing zone
+            custom_size: Some(Vec2::new(ground_width, 200.0)),
             ..default()
         },
         Transform::from_xyz(
-            center_offset + landing_zone_x, // Same x-position as landing zone
-            GROUND_OFFSET - 100.0,          // Centered below ground level
-            0.25,                           // Between background and landing zone
+            center_offset + ground_width / 4.0,
+            GROUND_OFFSET - 100.0,
+            0.25,
         ),
         Ground,
     ));
 
-    // Spawn landing zone
-    commands.spawn((
-        Sprite {
-            color: Color::srgba(0.0, 0.5, 0.0, 0.3),
-            custom_size: Some(Vec2::new(landing_zone_width, 10.0)),
-            ..default()
-        },
-        Transform::from_xyz(center_offset + landing_zone_x, GROUND_OFFSET + 5.0, 0.5),
-        LandingZone,
-    ));
+    // Spawn success zone based on reference type
+    match config.success.position_box.reference {
+        Reference::Initial => {
+            // For hover/positioning challenges
+            let box_width = (config.success.position_box.x_max - config.success.position_box.x_min)
+                * WORLD_TO_SCREEN_SCALE;
+            let box_height = (config.success.position_box.y_max
+                - config.success.position_box.y_min)
+                * WORLD_TO_SCREEN_SCALE;
+
+            // Initial position in screen space
+            let screen_pos = world_to_screen(initial_pos, Vec2::ZERO);
+
+            commands.spawn((
+                Sprite {
+                    color: Color::srgba(0.0, 0.5, 0.0, 0.2),
+                    custom_size: Some(Vec2::new(box_width.max(1.0), box_height.max(1.0))),
+                    ..default()
+                },
+                Transform::from_xyz(screen_pos.x, screen_pos.y, 0.5),
+                TargetZone, // Renamed from TargetZone
+            ));
+        }
+        Reference::Absolute => {
+            // For landing challenges
+            let landing_width = (config.success.position_box.x_max
+                - config.success.position_box.x_min)
+                * WORLD_TO_SCREEN_SCALE;
+            let landing_center_x =
+                (config.success.position_box.x_max + config.success.position_box.x_min) / 2.0;
+
+            commands.spawn((
+                Sprite {
+                    color: Color::srgba(0.0, 0.5, 0.0, 0.2),
+                    custom_size: Some(Vec2::new(landing_width.max(1.0), 10.0)),
+                    ..default()
+                },
+                Transform::from_xyz(
+                    center_offset + landing_center_x * WORLD_TO_SCREEN_SCALE,
+                    GROUND_OFFSET + 5.0,
+                    0.5,
+                ),
+                TargetZone, // Renamed from TargetZone
+            ));
+        }
+    }
+
+    // Spawn failure bounds if they exist
+    if let Some(bounds) = &config.failure.bounds {
+        let bounds_width = (bounds.x_max - bounds.x_min) * WORLD_TO_SCREEN_SCALE;
+        let bounds_height = (bounds.y_max - bounds.y_min) * WORLD_TO_SCREEN_SCALE;
+
+        let world_pos = match bounds.reference {
+            Reference::Absolute => Vec2::new(
+                (bounds.x_max + bounds.x_min) / 2.0,
+                (bounds.y_max + bounds.y_min) / 2.0,
+            ),
+            Reference::Initial => initial_pos,
+        };
+
+        let screen_pos = world_to_screen(world_pos, Vec2::ZERO);
+
+        commands.spawn((
+            Sprite {
+                color: Color::srgba(0.8, 0.0, 0.0, 0.1),
+                custom_size: Some(Vec2::new(bounds_width.max(1.0), bounds_height.max(1.0))),
+                ..default()
+            },
+            Transform::from_xyz(screen_pos.x, screen_pos.y, 0.4),
+            TargetZone, // Renamed from TargetZone
+        ));
+    }
 
     // Spawn lander
     commands.spawn((
@@ -266,7 +324,7 @@ pub fn update_visualization(
         Query<(
             &mut Transform,
             &Sprite,
-            Option<&LandingZone>,
+            Option<&TargetZone>,
             Option<&Ground>,
         )>,
     )>,
@@ -292,7 +350,8 @@ pub fn update_visualization(
         if ground.is_some() {
             // Ground uses same position as landing zone
             let landing_center = Vec2::new(
-                (level.config.success.x_min + level.config.success.x_max) / 2.0,
+                (level.config.success.position_box.x_min + level.config.success.position_box.x_max)
+                    / 2.0,
                 0.0,
             );
             let screen_pos = world_to_screen(landing_center, offset);
@@ -304,7 +363,8 @@ pub fn update_visualization(
         } else if landing_zone.is_some() {
             // Landing zone centered on success zone
             let landing_zone_pos = Vec2::new(
-                (level.config.success.x_min + level.config.success.x_max) / 2.0,
+                (level.config.success.position_box.x_min + level.config.success.position_box.x_max)
+                    / 2.0,
                 0.0,
             );
             let screen_pos = world_to_screen(landing_zone_pos, offset);

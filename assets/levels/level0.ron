@@ -13,7 +13,7 @@
         vx0: 0.0,
         vy0: 0.0,
         initial_angle: 0.0,
-        initial_fuel: 10.0
+        initial_fuel: 50.0
     ),
     success: (
         vx_max: 0.5,

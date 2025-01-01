@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     constants::LANDER_BASE_OFFSET,
-    levels::CurrentLevel,
+    levels::{CurrentLevel, Reference},
     rhai_api::{ControlOutput, LanderState as ScriptLanderState, ScriptEngine},
     visualization::CameraState,
 };
@@ -34,6 +34,83 @@ pub struct LanderState {
 const MOMENT_OF_INERTIA: f32 = 100.0; // kg·m²
 const ANGULAR_DAMPING: f32 = 0.0; // artificial damping coefficient
 
+fn check_success_conditions(state: &LanderState, level: &CurrentLevel) -> bool {
+    let config = &level.config;
+
+    // Check velocity constraints
+    let speed_ok = state.velocity.x.abs() <= config.success.vx_max
+        && state.velocity.y.abs() <= config.success.vy_max;
+
+    // Check angle constraints
+    let angle_ok =
+        (state.rotation - config.success.final_angle).abs() <= config.success.angle_tolerance;
+
+    // Check position constraints
+    let position_ok = match config.success.position_box.reference {
+        Reference::Initial => {
+            // For initial-reference boxes (like hover), always check position
+            let initial_pos = Vec2::new(config.initial.x0, config.initial.y0);
+            let rel_pos = state.position - initial_pos;
+            rel_pos.x >= config.success.position_box.x_min
+                && rel_pos.x <= config.success.position_box.x_max
+                && rel_pos.y >= config.success.position_box.y_min
+                && rel_pos.y <= config.success.position_box.y_max
+        }
+        Reference::Absolute => {
+            if state.position.y <= LANDER_BASE_OFFSET + 0.1 {
+                // Only check absolute position constraints when on/near ground
+                state.position.x >= config.success.position_box.x_min
+                    && state.position.x <= config.success.position_box.x_max
+                    && state.position.y >= config.success.position_box.y_min
+                    && state.position.y <= config.success.position_box.y_max
+            } else {
+                // When in air, only check speed and angle
+                false
+            }
+        }
+    };
+
+    speed_ok && position_ok && angle_ok
+}
+
+fn check_failure_conditions(state: &LanderState, level: &CurrentLevel) -> bool {
+    let config = &level.config;
+
+    // Check ground collision based on the flag
+    if state.position.y <= LANDER_BASE_OFFSET {
+        if config.failure.ground_collision {
+            // If ground_collision flag is true, any contact is failure
+            return true;
+        } else {
+            // Otherwise, check if landing was too hard
+            let hard_landing = state.velocity.x.abs() > config.success.vx_max * 1.5
+                || state.velocity.y.abs() > config.success.vy_max * 1.5;
+            if hard_landing {
+                return true;
+            }
+        }
+    }
+
+    // Check out-of-bounds if defined
+    if let Some(bounds) = &config.failure.bounds {
+        let reference_pos = match bounds.reference {
+            Reference::Absolute => Vec2::ZERO,
+            Reference::Initial => Vec2::new(config.initial.x0, config.initial.y0),
+        };
+
+        let rel_pos = state.position - reference_pos;
+        if rel_pos.x < bounds.x_min
+            || rel_pos.x > bounds.x_max
+            || rel_pos.y < bounds.y_min
+            || rel_pos.y > bounds.y_max
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
 pub fn simulation_system(
     time: Res<Time>,
     mut state: ResMut<LanderState>,
@@ -50,7 +127,7 @@ pub fn simulation_system(
             vx: state.velocity.x,
             vy: state.velocity.y,
             rotation: state.rotation,
-            angular_vel: state.angular_vel, // Added angular velocity
+            angular_vel: state.angular_vel,
             fuel: state.fuel,
         };
 
@@ -102,9 +179,6 @@ pub fn simulation_system(
         if state.fuel <= 0.0 {
             state.thrust_level = 0.0;
             state.gimbal_angle = 0.0;
-        } else {
-            state.thrust_level = new_thrust;
-            state.gimbal_angle = new_gimbal;
         }
 
         let config = &level.config;
@@ -153,45 +227,52 @@ pub fn simulation_system(
         state.velocity += acceleration * dt;
         state.position += velocity * dt;
 
+        // Ground collision check - check failure first
+        if state.position.y <= LANDER_BASE_OFFSET {
+            // Check for crash before zeroing velocity
+            if check_failure_conditions(&state, &level) {
+                state.crashed = true;
+                state.position.y = LANDER_BASE_OFFSET;
+                state.velocity = Vec2::ZERO;
+                state.angular_vel = 0.0;
+                state.thrust_level = 0.0;
+                state.gimbal_angle = 0.0;
+                return;
+            }
+
+            // Not a crash, normal ground contact
+            state.position.y = LANDER_BASE_OFFSET;
+            state.velocity = Vec2::ZERO;
+            state.angular_vel = 0.0;
+            state.thrust_level = 0.0;
+            state.gimbal_angle = 0.0;
+        }
+
         // Calculate fuel consumption
         let thrust_magnitude = thrust_force.length();
         let fuel_flow = calculate_mass_flow(thrust_magnitude, config.physics.isp);
         state.fuel = (state.fuel - fuel_flow * dt).max(0.0);
 
-        // Ground collision detection
-        if state.position.y <= LANDER_BASE_OFFSET {
-            state.position.y = LANDER_BASE_OFFSET;
+        // Check success/failure conditions
+        if check_failure_conditions(&state, &level) {
+            state.crashed = true;
+            return;
+        }
 
-            // Check landing conditions
-            let landing_speed_ok = state.velocity.y.abs() <= config.success.vy_max
-                && state.velocity.x.abs() <= config.success.vx_max;
-            let position_ok = state.position.x >= config.success.x_min
-                && state.position.x <= config.success.x_max;
-            let angle_ok = (state.rotation - config.success.final_angle).abs()
-                <= config.success.angle_tolerance;
+        // Check for success conditions
+        if check_success_conditions(&state, &level) {
+            state.success_timer += dt;
+            state.stabilizing = true;
 
-            // If all conditions are met, increment the success timer
-            if landing_speed_ok && position_ok && angle_ok {
-                state.success_timer += dt;
-                state.stabilizing = true;
-
-                // Check if we've met the persistence requirement
-                if state.success_timer >= config.success.persistence_period {
-                    state.landed = true;
-                    state.stabilizing = false;
-                }
-            } else {
-                // Reset the timer if any condition is not met
-                state.success_timer = 0.0;
+            // Check if we've met the persistence requirement
+            if state.success_timer >= config.success.persistence_period {
+                state.landed = true;
                 state.stabilizing = false;
-                state.crashed = true;
             }
-
-            // Stop all motion regardless of success/failure
-            state.velocity = Vec2::ZERO;
-            state.angular_vel = 0.0;
-            state.thrust_level = 0.0;
-            state.gimbal_angle = 0.0;
+        } else {
+            // Reset the timer if any condition is not met
+            state.success_timer = 0.0;
+            state.stabilizing = false;
         }
     }
 }

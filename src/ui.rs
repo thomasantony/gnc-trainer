@@ -181,7 +181,14 @@ pub fn ui_system(
             } else if lander_state.crashed {
                 ui.colored_label(egui::Color32::RED, "Crashed!");
             } else if lander_state.landed {
-                ui.colored_label(egui::Color32::GREEN, "Landed successfully!");
+                ui.colored_label(egui::Color32::GREEN, &current_level.config.success_message);
+            } else if lander_state.stabilizing {
+                let remaining =
+                    current_level.config.success.persistence_period - lander_state.success_timer;
+                ui.colored_label(
+                    egui::Color32::YELLOW,
+                    format!("Conditions met. Waiting to stabilize... {:.1}", remaining),
+                );
             }
 
             // Control buttons

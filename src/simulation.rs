@@ -26,6 +26,8 @@ pub struct LanderState {
     pub gimbal_angle: f32, // radians
     pub crashed: bool,
     pub landed: bool,
+    pub success_timer: f32, // Time spent meeting success criteria
+    pub stabilizing: bool,  // True when meeting conditions but not yet complete
 }
 
 // Constants for rotational dynamics
@@ -108,7 +110,7 @@ pub fn simulation_system(
         let config = &level.config;
 
         // Calculate current mass
-        let total_mass = config.physics.m + state.fuel;
+        let total_mass = config.physics.dry_mass + state.fuel;
 
         // When rotation is 0 (pointing up):
         //   - thrust should be upward
@@ -116,12 +118,12 @@ pub fn simulation_system(
         let thrust_direction = -state.rotation - state.gimbal_angle;
 
         let thrust_force = Vec2::new(
-            thrust_direction.sin() * state.thrust_level * config.physics.t,
-            thrust_direction.cos() * state.thrust_level * config.physics.t,
+            thrust_direction.sin() * state.thrust_level * config.physics.max_thrust,
+            thrust_direction.cos() * state.thrust_level * config.physics.max_thrust,
         );
 
         // Calculate gravity force (y-axis only)
-        let gravity_force = Vec2::new(0.0, config.physics.g * total_mass);
+        let gravity_force = Vec2::new(0.0, config.physics.gravity * total_mass);
 
         // Sum forces and calculate linear acceleration
         let total_force = thrust_force + gravity_force;
@@ -129,7 +131,10 @@ pub fn simulation_system(
 
         // Calculate torque from offset thrust
         let thrust_torque = if state.thrust_level > 0.0 {
-            -state.gimbal_angle.sin() * state.thrust_level * config.physics.t * LANDER_BASE_OFFSET
+            -state.gimbal_angle.sin()
+                * state.thrust_level
+                * config.physics.max_thrust
+                * LANDER_BASE_OFFSET
         } else {
             0.0
         };
@@ -162,14 +167,27 @@ pub fn simulation_system(
                 && state.velocity.x.abs() <= config.success.vx_max;
             let position_ok = state.position.x >= config.success.x_min
                 && state.position.x <= config.success.x_max;
-            let rotation_ok = state.rotation.abs() <= 0.1; // Allow slight tilt
+            let angle_ok = (state.rotation - config.success.final_angle).abs()
+                <= config.success.angle_tolerance;
 
-            if landing_speed_ok && position_ok && rotation_ok {
-                state.landed = true;
+            // If all conditions are met, increment the success timer
+            if landing_speed_ok && position_ok && angle_ok {
+                state.success_timer += dt;
+                state.stabilizing = true;
+
+                // Check if we've met the persistence requirement
+                if state.success_timer >= config.success.persistence_period {
+                    state.landed = true;
+                    state.stabilizing = false;
+                }
             } else {
+                // Reset the timer if any condition is not met
+                state.success_timer = 0.0;
+                state.stabilizing = false;
                 state.crashed = true;
             }
 
+            // Stop all motion regardless of success/failure
             state.velocity = Vec2::ZERO;
             state.angular_vel = 0.0;
             state.thrust_level = 0.0;
@@ -186,13 +204,15 @@ pub fn reset_simulation(
     *state = LanderState {
         position: Vec2::new(level.config.initial.x0, level.config.initial.y0),
         velocity: Vec2::new(level.config.initial.vx0, level.config.initial.vy0),
-        rotation: level.config.initial.r0,
+        rotation: level.config.initial.initial_angle,
         angular_vel: 0.0,
-        fuel: level.config.initial.f0,
+        fuel: level.config.initial.initial_fuel,
         thrust_level: 0.0,
         gimbal_angle: 0.0,
         crashed: false,
         landed: false,
+        success_timer: 0.0,
+        stabilizing: false,
     };
 
     // Reset camera to following state

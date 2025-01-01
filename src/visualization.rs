@@ -13,11 +13,13 @@ const RIGHT_PANEL_WIDTH: f32 = 600.0;
 const PARTICLE_LIFETIME: f32 = 0.5;
 const GROUND_OFFSET: f32 = -200.0; // Pixels from center of screen to ground
 const MIN_VIEW_HEIGHT: f32 = 30.0; // Minimum world height (in meters) visible in the view
-
 const PARTICLE_SPAWN_RATE: f32 = 0.01; // Spawn every 10ms
 const PARTICLE_SIZE: f32 = 2.0; // Smaller particles
 const PARTICLE_BASE_SPEED: f32 = 150.0; // Moderate speed for better visibility
-const PARTICLE_SPREAD: f32 = 0.35; // Narrower spread angle (in radians)
+const PARTICLE_SPREAD: f32 = 0.15; // Spread angle (in radians)
+const PARTICLE_COUNT_PER_SPAWN: i32 = 3; // Number of particles to spawn each time
+const PARTICLE_BOUNCE_DAMPING: f32 = 0.1; // How much velocity is retained after bounce
+const PARTICLE_GROUND_Y: f32 = 0.1; // Ground level for particles [m]
 
 #[derive(Resource)]
 pub struct CameraState {
@@ -48,6 +50,7 @@ pub struct LandingZone;
 pub struct ExhaustParticle {
     lifetime: Timer,
     velocity: Vec2,
+    world_pos: Vec2,
 }
 
 #[derive(Component)]
@@ -336,7 +339,7 @@ fn spawn_particle(
 ) {
     let mut rng = rand::thread_rng();
     let spread = PARTICLE_SPREAD;
-    let angle_offset = rng.gen_range(-spread..spread);
+    let angle_offset = rng.gen_range(-spread..spread) * 2.0;
     let angle = Vec2::new(
         particle_direction.x * angle_offset.cos() - particle_direction.y * angle_offset.sin(),
         particle_direction.x * angle_offset.sin() + particle_direction.y * angle_offset.cos(),
@@ -346,12 +349,15 @@ fn spawn_particle(
     // Smaller spread at emission point
     let offset = Vec2::new(rng.gen_range(-0.2..0.2), rng.gen_range(0.0..0.5));
 
-    // Calculate screen position accounting for camera offset once
-    let screen_pos = world_to_screen(lander_pos + base_position + offset, camera_offset);
+    // Calculate world position for the particle
+    let world_pos = lander_pos + base_position + offset;
+
+    // Calculate screen position accounting for camera offset
+    let screen_pos = world_to_screen(world_pos, camera_offset);
 
     commands.spawn((
         Sprite {
-            color: ORANGE_RED.into(),
+            color: Color::srgba(0.8, 0.3, 0.2, 0.8),
             custom_size: Some(Vec2::new(PARTICLE_SIZE, PARTICLE_SIZE)),
             ..default()
         },
@@ -359,6 +365,7 @@ fn spawn_particle(
         ExhaustParticle {
             lifetime: Timer::from_seconds(PARTICLE_LIFETIME, TimerMode::Once),
             velocity: angle * speed,
+            world_pos,
         },
     ));
 }
@@ -374,18 +381,36 @@ pub fn particle_system(
     )>,
     lander_state: Res<LanderState>,
 ) {
+    let dt = time.delta_secs();
+
     // Update existing particles
     let mut to_despawn = Vec::new();
     {
         let mut particle_query = query_set.p1();
         for (entity, mut transform, mut particle) in particle_query.iter_mut() {
             particle.lifetime.tick(time.delta());
+
             if particle.lifetime.finished() {
                 to_despawn.push(entity);
             } else {
-                // Update position based on velocity
-                transform.translation.x += particle.velocity.x * time.delta_secs();
-                transform.translation.y += particle.velocity.y * time.delta_secs();
+                // Update screen and world positions
+                let delta = particle.velocity * dt;
+                transform.translation.x += delta.x;
+                transform.translation.y += delta.y;
+                particle.world_pos += delta / WORLD_TO_SCREEN_SCALE;
+
+                // Check for ground collision
+                if particle.world_pos.y <= PARTICLE_GROUND_Y {
+                    // Bounce
+                    particle.world_pos.y = PARTICLE_GROUND_Y;
+                    particle.velocity.y = -particle.velocity.y * PARTICLE_BOUNCE_DAMPING;
+                    particle.velocity.x *= 0.9; // Some horizontal damping
+
+                    // If moving very slowly after bounce, despawn
+                    if particle.velocity.length() < 20.0 {
+                        to_despawn.push(entity);
+                    }
+                }
             }
         }
     }
@@ -399,7 +424,8 @@ pub fn particle_system(
     if lander_state.thrust_level > 0.0 && !lander_state.landed && !lander_state.crashed {
         timer.0.tick(time.delta());
         if timer.0.just_finished() {
-            let num_particles = (lander_state.thrust_level * 5.0) as i32; // More particles
+            let num_particles =
+                (lander_state.thrust_level * PARTICLE_COUNT_PER_SPAWN as f32) as i32;
 
             // When rotation is 0 (pointing up):
             //   - particles should come out the bottom

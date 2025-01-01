@@ -1,0 +1,8 @@
+- Add attitude constraint for winning condition
+    - Add stability for some time, i.e., persistence of win condition
+- attitude control example
+- Import from existing RHAI script file?
+- Precision landing example with X constraint as well
+    - Show constraint using the green bar
+- explode on crash
+- Save/Load file (show dropdown + refresh?)

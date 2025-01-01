@@ -18,12 +18,22 @@
     success: (
         vx_max: 999999.0,  // horizontal velocity irrelevant
         vy_max: 2.0,       // safe vertical landing speed
-        x_min: -999999.0,  // land anywhere
-        x_max: 999999.0,
+        position_box: (     // land anywhere on the ground
+            x_min: -999999.0,
+            x_max: 999999.0,
+            y_min: 0.0,    // must be on ground
+            y_max: 2.0,    // small tolerance for ground contact
+            reference: Absolute,
+        ),
         final_angle: 0.0,
         angle_tolerance: 0.1,
         persistence_period: 5.0,
     ),
+    failure: (
+        ground_collision: false,  // We handle hard landings via velocity constraints
+        bounds: None,     // No out-of-bounds area
+    ),
     control_scheme: VerticalOnly,
     success_message: "Landed successfully!",
+    failure_message: "Landing too hard! The lander crashed.",
 )

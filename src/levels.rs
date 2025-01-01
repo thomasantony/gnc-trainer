@@ -26,14 +26,34 @@ pub struct InitialState {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub enum Reference {
+    Absolute, // Compare against absolute coordinates
+    Initial,  // Compare against initial state
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct BoundingBox {
+    pub x_min: f32,
+    pub x_max: f32,
+    pub y_min: f32,
+    pub y_max: f32,
+    pub reference: Reference,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct SuccessCriteria {
-    pub vx_max: f32,             // max horizontal velocity
-    pub vy_max: f32,             // max vertical velocity
-    pub x_min: f32,              // landing zone left boundary
-    pub x_max: f32,              // landing zone right boundary
-    pub final_angle: f32,        // desired final angle (radians)
-    pub angle_tolerance: f32,    // acceptable deviation from final angle (radians)
-    pub persistence_period: f32, // time criteria must be met (seconds)
+    pub vx_max: f32,               // max horizontal velocity
+    pub vy_max: f32,               // max vertical velocity
+    pub position_box: BoundingBox, // Box defining valid positions
+    pub final_angle: f32,          // desired final angle (radians)
+    pub angle_tolerance: f32,      // acceptable deviation from final angle (radians)
+    pub persistence_period: f32,   // time criteria must be met (seconds)
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct FailureCriteria {
+    pub ground_collision: bool, // whether ground collision is an instant fail
+    pub bounds: Option<BoundingBox>, // Optional out-of-bounds box that causes failure
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -43,8 +63,10 @@ pub struct LevelConfig {
     pub physics: Physics,
     pub initial: InitialState,
     pub success: SuccessCriteria,
+    pub failure: FailureCriteria,
     pub control_scheme: ControlScheme,
     pub success_message: String,
+    pub failure_message: String,
 }
 
 #[derive(Resource)]
@@ -58,8 +80,8 @@ impl LevelManager {
         let mut levels = HashMap::new();
         let mut available_levels = Vec::new();
 
-        // Try loading levels from 1 to 10 (arbitrary limit)
-        for i in 1..=10 {
+        // Try loading levels starting from 0
+        for i in 0..=10 {
             if let Ok(content) = std::fs::read_to_string(format!("assets/levels/level{}.ron", i)) {
                 if let Ok(config) = ron::de::from_str::<LevelConfig>(&content) {
                     available_levels.push((i, config.name.clone()));

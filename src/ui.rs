@@ -30,7 +30,7 @@ pub struct EditorState {
 impl Default for EditorState {
     fn default() -> Self {
         Self {
-            code: include_str!("../assets/scripts/hover.rhai").into(),
+            code: include_str!("../assets/scripts/level0_default.rhai").into(),
             simulation_state: SimulationState::Stopped,
             console_height: 150.0,
             last_console_output: Vec::new(),
@@ -91,6 +91,7 @@ pub fn ui_system(
             }
 
             reset_simulation(&mut lander_state, &current_level, &mut camera_state);
+            reset_flag.0 = true; // Set the reset flag to make the lander visible again
         }
     }
 
@@ -179,7 +180,7 @@ pub fn ui_system(
             if let Some(error) = &script_engine.error_message {
                 ui.colored_label(egui::Color32::RED, error);
             } else if lander_state.crashed {
-                ui.colored_label(egui::Color32::RED, "Crashed!");
+                ui.colored_label(egui::Color32::RED, &current_level.config.failure_message);
             } else if lander_state.landed {
                 ui.colored_label(egui::Color32::GREEN, &current_level.config.success_message);
             } else if lander_state.stabilizing {

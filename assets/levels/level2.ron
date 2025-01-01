@@ -10,20 +10,30 @@
     initial: (
         x0: 0.0,   // start left of target
         y0: 150.0, // starting altitude
-        vx0: 20.0, // no initial velocity
-        vy0: -10.0,
+        vx0: 20.0, // initial horizontal velocity
+        vy0: -10.0, // initial vertical velocity
         initial_angle: 1.578,  // [rad]
         initial_fuel: 70.98,   // [kg]
     ),
     success: (
         vx_max: 1.0,   // max horizontal landing speed
         vy_max: 2.0,   // max vertical landing speed
-        x_min: -100000.0,   // landing zone boundaries
-        x_max: 100000.0,
+        position_box: (     // land anywhere on the ground
+            x_min: -100000.0,
+            x_max: 100000.0,
+            y_min: 0.0,    // must be on ground
+            y_max: 2.0,    // small tolerance for ground contact
+            reference: Absolute,
+        ),
         final_angle: 0.0,
         angle_tolerance: 0.1,
         persistence_period: 1.0,
     ),
+    failure: (
+        ground_collision: false,  // We handle hard landings via velocity constraints
+        bounds: None,     // No out-of-bounds area
+    ),
     control_scheme: ThrustVector,
     success_message: "Landed successfully!",
+    failure_message: "Landing too hard! The lander crashed.",
 )

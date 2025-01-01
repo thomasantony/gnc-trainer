@@ -29,7 +29,7 @@ pub struct LanderState {
 
 // Constants for rotational dynamics
 const MOMENT_OF_INERTIA: f32 = 100.0; // kg·m²
-const ANGULAR_DAMPING: f32 = 0.2; // artificial damping coefficient
+const ANGULAR_DAMPING: f32 = 0.0; // artificial damping coefficient
 
 pub fn simulation_system(
     time: Res<Time>,
@@ -47,6 +47,7 @@ pub fn simulation_system(
             vx: state.velocity.x,
             vy: state.velocity.y,
             rotation: state.rotation,
+            angular_vel: state.angular_vel, // Added angular velocity
             fuel: state.fuel,
         };
 
@@ -127,7 +128,7 @@ pub fn simulation_system(
 
         // Calculate torque from offset thrust
         let thrust_torque = if state.thrust_level > 0.0 {
-            -state.gimbal_angle * state.thrust_level * config.physics.t * LANDER_BASE_OFFSET
+            -state.gimbal_angle.sin() * state.thrust_level * config.physics.t * LANDER_BASE_OFFSET
         } else {
             0.0
         };

@@ -6,6 +6,7 @@ use crate::{
     levels::{ControlScheme, CurrentLevel, LevelManager},
     rhai_api::{ControlType, ScriptEngine},
     simulation::{reset_simulation, LanderState},
+    visualization::CameraState,
 };
 
 const CONSOLE_HEIGHT: f32 = 500.0;
@@ -44,6 +45,7 @@ pub fn ui_system(
     mut script_engine: ResMut<ScriptEngine>,
     mut lander_state: ResMut<LanderState>,
     mut current_level: ResMut<CurrentLevel>,
+    mut camera_state: ResMut<CameraState>,
     level_manager: Res<LevelManager>,
 ) {
     let mut reset_requested = false;
@@ -87,7 +89,7 @@ pub fn ui_system(
                 editor_state.code = script;
             }
 
-            reset_simulation(&mut lander_state, &current_level);
+            reset_simulation(&mut lander_state, &current_level, &mut camera_state);
         }
     }
 
@@ -177,7 +179,7 @@ pub fn ui_system(
                         // Compile script before starting
                         if script_engine.compile_script(&editor_state.code).is_ok() {
                             editor_state.is_running = true;
-                            reset_simulation(&mut lander_state, &current_level);
+                            reset_simulation(&mut lander_state, &current_level, &mut camera_state);
                         }
                     } else {
                         editor_state.is_running = false;
@@ -245,6 +247,6 @@ pub fn ui_system(
     if reset_requested {
         editor_state.is_running = false;
         script_engine.error_message = None;
-        reset_simulation(&mut lander_state, &current_level);
+        reset_simulation(&mut lander_state, &current_level, &mut camera_state);
     }
 }

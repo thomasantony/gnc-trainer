@@ -12,6 +12,22 @@ const VISUALIZATION_WIDTH: f32 = 680.0;
 const RIGHT_PANEL_WIDTH: f32 = 600.0;
 const PARTICLE_LIFETIME: f32 = 0.5;
 const GROUND_OFFSET: f32 = -200.0; // Pixels from center of screen to ground
+const MIN_VIEW_HEIGHT: f32 = 30.0; // Minimum world height (in meters) visible in the view
+
+#[derive(Resource)]
+pub struct CameraState {
+    pub following: bool,
+    pub target_offset: Vec2, // Changed to Vec2 to track both x and y offsets
+}
+
+impl Default for CameraState {
+    fn default() -> Self {
+        Self {
+            following: true,
+            target_offset: Vec2::ZERO,
+        }
+    }
+}
 
 // Components
 #[derive(Component)]
@@ -65,6 +81,7 @@ pub fn spawn_visualization(
     mut materials: ResMut<Assets<ColorMaterial>>,
     level: Res<CurrentLevel>,
 ) {
+    commands.insert_resource(CameraState::default());
     let center_offset = -(RIGHT_PANEL_WIDTH / 2.0);
 
     // Spawn lander
@@ -112,27 +129,71 @@ pub fn spawn_visualization(
     )));
 }
 
+fn calculate_view_offset(lander_pos: Vec2) -> Vec2 {
+    // Always calculate full offset needed to center the lander
+    let screen_pos_without_offset = Vec2::new(
+        lander_pos.x * WORLD_TO_SCREEN_SCALE,
+        lander_pos.y * WORLD_TO_SCREEN_SCALE + GROUND_OFFSET,
+    );
+
+    // For X: always follow to keep centered horizontally
+    let x_offset = screen_pos_without_offset.x;
+
+    // For Y: smoothly transition based on height
+    let ground_view_height = MIN_VIEW_HEIGHT * WORLD_TO_SCREEN_SCALE;
+    let full_follow_height = ground_view_height * 2.0;
+    let screen_y = lander_pos.y * WORLD_TO_SCREEN_SCALE;
+
+    let y_offset = if screen_y > full_follow_height {
+        // Above transition: full vertical follow
+        screen_pos_without_offset.y
+    } else if screen_y < ground_view_height {
+        // Below transition: no vertical follow
+        0.0
+    } else {
+        // In transition: smoothly interpolate
+        let t = (screen_y - ground_view_height) / ground_view_height;
+        screen_pos_without_offset.y * t
+    };
+
+    Vec2::new(x_offset, y_offset)
+}
+
+fn world_to_screen(pos: Vec2, camera_offset: Vec2) -> Vec2 {
+    let center_offset = -(RIGHT_PANEL_WIDTH / 2.0);
+
+    Vec2::new(
+        pos.x * WORLD_TO_SCREEN_SCALE + center_offset - camera_offset.x,
+        pos.y * WORLD_TO_SCREEN_SCALE + GROUND_OFFSET - camera_offset.y,
+    )
+}
+
 pub fn update_visualization(
     mut lander_query: Query<&mut Transform, With<Lander>>,
     mut landing_zone_query: Query<&mut Transform, (With<LandingZone>, Without<Lander>)>,
+    mut camera_state: ResMut<CameraState>,
     lander_state: Res<LanderState>,
     level: Res<CurrentLevel>,
 ) {
+    // Calculate view offset based on lander position
+    let offset = calculate_view_offset(lander_state.position);
+    camera_state.target_offset = offset;
+
     if let Ok(mut transform) = lander_query.get_single_mut() {
-        let screen_pos = world_to_screen(lander_state.position);
+        let screen_pos = world_to_screen(lander_state.position, offset);
         transform.translation.x = screen_pos.x;
         transform.translation.y = screen_pos.y;
-
-        // Set rotation around the Z axis (2D rotation)
-        // Note: lander_state.rotation is in radians, which is what we want
         transform.rotation = Quat::from_rotation_z(lander_state.rotation);
     }
 
     if let Ok(mut transform) = landing_zone_query.get_single_mut() {
-        let center_offset = -(RIGHT_PANEL_WIDTH / 2.0);
-        let landing_zone_x =
-            (level.config.success.x_min + level.config.success.x_max) / 2.0 * WORLD_TO_SCREEN_SCALE;
-        transform.translation.x = center_offset + landing_zone_x;
+        let landing_zone_pos = Vec2::new(
+            (level.config.success.x_min + level.config.success.x_max) / 2.0,
+            0.0, // Ground level
+        );
+        let screen_pos = world_to_screen(landing_zone_pos, camera_state.target_offset);
+        transform.translation.x = screen_pos.x;
+        transform.translation.y = screen_pos.y + 5.0; // Slight offset from ground
     }
 }
 
@@ -170,13 +231,14 @@ pub fn particle_system(
     mut commands: Commands,
     time: Res<Time>,
     mut timer: ResMut<ParticleSpawnTimer>,
+    camera_state: Res<CameraState>,
     mut query_set: ParamSet<(
         Query<&Transform, With<Lander>>,
         Query<(Entity, &mut Transform, &mut ExhaustParticle)>,
     )>,
     lander_state: Res<LanderState>,
 ) {
-    // Update existing particles
+    // Update existing particles with the camera offset
     let mut to_despawn = Vec::new();
     {
         let mut particle_query = query_set.p1();
@@ -185,9 +247,11 @@ pub fn particle_system(
             if particle.lifetime.finished() {
                 to_despawn.push(entity);
             } else {
-                // Move particle based on its velocity
                 transform.translation.x += particle.velocity.x * time.delta_secs();
                 transform.translation.y += particle.velocity.y * time.delta_secs();
+                // Adjust particle position for camera movement
+                transform.translation.x -= camera_state.target_offset.x;
+                transform.translation.y -= camera_state.target_offset.y;
             }
         }
     }
@@ -227,13 +291,4 @@ pub fn particle_system(
             }
         }
     }
-}
-
-// Convert simulation coordinates to screen coordinates
-fn world_to_screen(pos: Vec2) -> Vec2 {
-    let center_offset = -(RIGHT_PANEL_WIDTH / 2.0);
-    Vec2::new(
-        pos.x * WORLD_TO_SCREEN_SCALE + center_offset,
-        pos.y * WORLD_TO_SCREEN_SCALE + GROUND_OFFSET,
-    )
 }

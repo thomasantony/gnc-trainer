@@ -8,6 +8,8 @@ use crate::{
     simulation::{reset_simulation, LanderState},
 };
 
+const CONSOLE_HEIGHT: f32 = 500.0;
+
 #[derive(Resource)]
 pub struct EditorState {
     pub code: String,
@@ -126,20 +128,26 @@ pub fn ui_system(
             ui.add_space(8.0);
 
             // Code editor
-            CodeEditor::default()
-                .id_source("code_editor")
-                .with_rows(20)
-                .with_fontsize(14.0)
-                .with_theme(ColorTheme::GRUVBOX)
-                .with_syntax(Syntax::rust())
-                .with_numlines(true)
-                .show(ui, &mut editor_state.code);
-
-            ui.add_space(8.0);
+            egui::ScrollArea::vertical()
+                .max_height(CONSOLE_HEIGHT)
+                .show(ui, |ui| {
+                    CodeEditor::default()
+                        .id_source("code_editor")
+                        .with_rows(20)
+                        .with_fontsize(14.0)
+                        .with_theme(ColorTheme::GRUVBOX)
+                        .with_syntax(Syntax::rust())
+                        .with_numlines(true)
+                        .vscroll(true)
+                        .stick_to_bottom(true)
+                        .show(ui, &mut editor_state.code);
+                    ui.add_space(8.0);
+                });
 
             // Console output
             ui.label("Console Output");
             egui::ScrollArea::vertical()
+                .id_salt(1234)
                 .max_height(editor_state.console_height)
                 .show(ui, |ui| {
                     let console_output = script_engine.take_console_output();

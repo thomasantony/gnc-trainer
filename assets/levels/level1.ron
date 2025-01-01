@@ -22,9 +22,4 @@
         x_max: 999999.0,
     ),
     control_scheme: VerticalOnly,
-    script_api: [
-        "altitude",
-        "velocity",
-        "fuel",
-    ],
 )

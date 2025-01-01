@@ -105,24 +105,33 @@ pub fn ui_system(
 
             // Available API documentation
             ui.collapsing("Available API", |ui| {
-                ui.label("Script state variables:");
-                for var in &current_level.config.script_api {
-                    ui.label(format!("• state[\"{}\"]", var));
-                }
+                ui.label("Available state variables:");
+                ui.label("• state[\"x\"] - horizontal position (meters)");
+                ui.label("• state[\"y\"] - vertical position (meters)");
+                ui.label("• state[\"vx\"] - horizontal velocity (m/s)");
+                ui.label("• state[\"vy\"] - vertical velocity (m/s)");
+                ui.label("• state[\"rotation\"] - rotation angle (radians)");
+                ui.label("• state[\"angular_vel\"] - angular velocity (rad/s)");
+                ui.label("• state[\"fuel\"] - remaining fuel mass (kg)");
+                ui.add_space(4.0);
+
+                ui.label("Helper functions:");
+                ui.label("• console(value) - print debug output");
+                ui.label("• user_state - persistent variable storage");
                 ui.add_space(4.0);
 
                 match current_level.config.control_scheme {
                     ControlScheme::VerticalOnly => {
-                        ui.label("Return control with:");
-                        ui.code("simple_control(thrust)");
-                        ui.label("where thrust is between 0.0 and 1.0");
+                        ui.label("Control output:");
+                        ui.label("Return a single number for thrust (0.0 to 1.0)");
+                        ui.code("return 0.5; // 50% thrust");
                     }
                     ControlScheme::ThrustVector => {
-                        ui.label("Return control with:");
-                        ui.code("vector_control(thrust, gimbal)");
-                        ui.label("where:");
-                        ui.label("• thrust is between 0.0 and 1.0");
-                        ui.label("• gimbal is between -0.4 and 0.4 radians");
+                        ui.label("Control output:");
+                        ui.label("Return an array: [thrust, gimbal]");
+                        ui.label("• thrust: 0.0 to 1.0");
+                        ui.label("• gimbal: -0.4 to 0.4 radians");
+                        ui.code("return [0.5, 0.1]; // 50% thrust, 0.1 rad gimbal");
                     }
                 }
             });

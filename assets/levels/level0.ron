@@ -1,0 +1,45 @@
+(
+    name: "Hover Test",
+    description: "Maintain your position within ±1m of the starting point for 10 seconds. Stay upright! Going outside the red zone will end the simulation.",
+    physics: (
+        gravity: -9.81,
+        dry_mass: 1000.0,
+        max_thrust: 15000.0,
+        isp: 300.0
+    ),
+    initial: (
+        x0: 0.0,
+        y0: 20.0,
+        vx0: 0.0,
+        vy0: 0.0,
+        initial_angle: 0.0,
+        initial_fuel: 10.0
+    ),
+    success: (
+        vx_max: 0.5,
+        vy_max: 0.5,
+        position_box: (
+            x_min: -3.0,
+            x_max: 3.0,
+            y_min: -3.0,
+            y_max: 3.0,
+            reference: Initial,
+        ),
+        final_angle: 0.0,
+        angle_tolerance: 0.1,
+        persistence_period: 10.0
+    ),
+    failure: (
+        ground_collision: true,
+        bounds: Some((
+            x_min: -3.0,
+            x_max: 3.0,
+            y_min: -3.0,
+            y_max: 3.0,
+            reference: Initial,
+        )),
+    ),
+    control_scheme: VerticalOnly,
+    success_message: "Great job! You maintained a stable hover.",
+    failure_message: "Mission failed! The lander moved outside the permitted zone or crashed.",
+)

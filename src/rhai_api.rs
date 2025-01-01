@@ -26,7 +26,7 @@ pub struct LanderState {
     pub vx: f32,
     pub vy: f32,
     pub rotation: f32,
-    pub angular_vel: f32, // Added angular velocity
+    pub angular_vel: f32,
     pub fuel: f32,
 }
 
@@ -36,8 +36,8 @@ pub struct ScriptEngine {
     compiled_script: Option<Arc<AST>>,
     pub error_message: Option<String>,
     pub control_type: ControlType,
-    pub user_state: RhaiMap,         // Persistent user state
-    pub console_buffer: Vec<String>, // Console output buffer
+    pub user_state: RhaiMap,
+    pub console_buffer: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -49,26 +49,6 @@ pub enum ControlType {
 impl Default for ScriptEngine {
     fn default() -> Self {
         let mut engine = Engine::new();
-
-        // Register types
-        engine.register_type::<SimpleControl>();
-        engine.register_type::<VectoredControl>();
-
-        // Register control functions
-        engine.register_fn("simple_control", |thrust: f64| -> Dynamic {
-            let control = SimpleControl {
-                thrust: thrust as f32,
-            };
-            Dynamic::from(control)
-        });
-
-        engine.register_fn("vector_control", |thrust: f64, gimbal: f64| -> Dynamic {
-            let control = VectoredControl {
-                thrust: thrust as f32,
-                gimbal: gimbal as f32,
-            };
-            Dynamic::from(control)
-        });
 
         // Register print function
         let print_fn = move |text: &str| {
@@ -82,7 +62,7 @@ impl Default for ScriptEngine {
         engine.set_max_expr_depths(64, 64);
         engine.set_max_operations(100_000);
         engine.set_max_modules(0);
-        engine.set_max_string_size(1_000_000); // Allow larger strings for console output
+        engine.set_max_string_size(1_000_000);
         engine.disable_symbol("eval");
 
         Self {
@@ -96,7 +76,6 @@ impl Default for ScriptEngine {
     }
 }
 
-// Thread-local storage for console buffer during script execution
 thread_local! {
     static CONSOLE_BUFFER: std::cell::RefCell<Vec<String>> = std::cell::RefCell::new(Vec::new());
 }
@@ -145,36 +124,64 @@ impl ScriptEngine {
             // Create scope with state and user_state
             let mut scope = Scope::new();
             scope.push("state", map.clone());
-            scope.push("user_state", self.user_state.clone());
+            scope.push_dynamic("user_state", Dynamic::from(self.user_state.clone()));
 
-            // Execute script
+            // First evaluate script to define functions
             match self.engine.eval_ast_with_scope::<Dynamic>(&mut scope, ast) {
-                Ok(scope_copy) => {
-                    // Extract updated user_state
-                    if let Some(new_user_state) = scope_copy.try_cast::<RhaiMap>() {
-                        self.user_state = new_user_state;
-                    }
-
-                    // Get console output
-                    CONSOLE_BUFFER.with(|buffer| {
-                        self.console_buffer.extend(buffer.borrow().iter().cloned());
-                    });
-
-                    // Call control function with current state
+                Ok(_) => {
+                    // Now call the control function
                     match self
                         .engine
-                        .call_fn::<Dynamic>(&mut scope, &ast, "control", (map,))
+                        .call_fn::<Dynamic>(&mut scope, ast, "control", (map,))
                     {
-                        Ok(result) => match self.control_type {
-                            ControlType::Simple => {
-                                let control: SimpleControl = result.cast();
-                                Some(ControlOutput::Simple(control))
+                        Ok(result) => {
+                            // Get console output
+                            CONSOLE_BUFFER.with(|buffer| {
+                                self.console_buffer.extend(buffer.borrow().iter().cloned());
+                            });
+
+                            // Extract updated user_state
+                            if let Some(new_state) = scope.get_value::<RhaiMap>("user_state") {
+                                self.user_state = new_state;
                             }
-                            ControlType::Vectored => {
-                                let control: VectoredControl = result.cast();
-                                Some(ControlOutput::Vectored(control))
+
+                            // Convert result to control output
+                            match self.control_type {
+                                ControlType::Simple => match result.as_float() {
+                                    Ok(thrust) => Some(ControlOutput::Simple(SimpleControl {
+                                        thrust: thrust as f32,
+                                    })),
+                                    Err(_) => {
+                                        self.error_message = Some(
+                                            "Control function must return a number (thrust)".into(),
+                                        );
+                                        None
+                                    }
+                                },
+                                ControlType::Vectored => match result.into_array() {
+                                    Ok(array) if array.len() == 2 => {
+                                        match (array[0].as_float(), array[1].as_float()) {
+                                            (Ok(thrust), Ok(gimbal)) => {
+                                                Some(ControlOutput::Vectored(VectoredControl {
+                                                    thrust: thrust as f32,
+                                                    gimbal: gimbal as f32,
+                                                }))
+                                            }
+                                            _ => {
+                                                self.error_message = Some("Control function must return [thrust, gimbal] as numbers".into());
+                                                None
+                                            }
+                                        }
+                                    }
+                                    _ => {
+                                        self.error_message = Some(
+                                            "Control function must return [thrust, gimbal]".into(),
+                                        );
+                                        None
+                                    }
+                                },
                             }
-                        },
+                        }
                         Err(e) => {
                             let error = format!("Runtime error: {}", e);
                             self.error_message = Some(error);

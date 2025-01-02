@@ -13,7 +13,7 @@ mod visualization;
 use bevy_persistent::Persistent;
 use levels::{CurrentLevel, LevelManager};
 use particles::{particle_system, ParticleSpawnTimer};
-use persistence::setup_persistence;
+use persistence::{setup_persistence, LevelProgress};
 use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState};
 use ui::{
@@ -22,7 +22,7 @@ use ui::{
 };
 use visualization::{
     reset_lander_visibility, spawn_visualization, update_grid_lines, update_visualization,
-    CameraState, ResetVisibilityFlag,
+    CameraState, MainCamera, ResetVisibilityFlag,
 };
 
 fn main() {
@@ -48,11 +48,11 @@ fn main() {
             0.05,
             TimerMode::Repeating,
         )))
-        .add_systems(Startup, (spawn_visualization, setup, setup_persistence))
-        .add_systems(Update, level_completion_check)
         .init_state::<GameState>()
         .insert_resource(State::new(GameState::LevelSelect))
         .insert_resource(LevelCompletePopup::default())
+        .add_systems(Startup, (spawn_visualization, setup, setup_persistence))
+        .add_systems(Update, level_completion_check)
         .add_systems(
             Update,
             (
@@ -66,6 +66,7 @@ fn main() {
                     particle_system,
                     reset_lander_visibility,
                     visualization::reset_visualization_system,
+                    save_current_editor_state, // Renamed from autosave_editor_state
                 )
                     .run_if(in_state(GameState::Playing)),
             ),
@@ -79,12 +80,8 @@ fn setup(
     level: Res<CurrentLevel>,
     mut camera_state: ResMut<CameraState>,
 ) {
-    commands.spawn(Camera2d);
+    commands.spawn((Camera2d, MainCamera));
     reset_simulation(&mut lander_state, &level, &mut camera_state);
-}
-
-fn setup_game(mut next_state: ResMut<NextState<GameState>>) {
-    next_state.set(GameState::LevelSelect);
 }
 
 fn run_simulation(state: Res<EditorState>, lander_state: Res<LanderState>) -> bool {
@@ -93,10 +90,25 @@ fn run_simulation(state: Res<EditorState>, lander_state: Res<LanderState>) -> bo
         && !lander_state.crashed
 }
 
+pub fn save_current_editor_state(
+    editor_state: Res<EditorState>,
+    current_level: Res<CurrentLevel>,
+    level_manager: Res<LevelManager>,
+    progress: ResMut<Persistent<LevelProgress>>,
+) {
+    if let Some((level_num, _)) = level_manager
+        .available_levels
+        .iter()
+        .find(|(_, name)| name == &current_level.config.name)
+    {
+        let _ = persistence::save_editor_state(*level_num, editor_state.code.clone(), progress);
+    }
+}
+
 fn level_completion_check(
     editor_state: Res<EditorState>,
     lander_state: Res<LanderState>,
-    mut progress: ResMut<Persistent<persistence::LevelProgress>>,
+    progress: ResMut<Persistent<persistence::LevelProgress>>,
     current_level: Res<CurrentLevel>,
     level_manager: Res<LevelManager>,
     mut popup: ResMut<LevelCompletePopup>,

@@ -11,6 +11,9 @@ const RIGHT_PANEL_WIDTH: f32 = 600.0;
 const GROUND_OFFSET: f32 = -200.0; // Pixels from center of screen to ground
 const MIN_VIEW_HEIGHT: f32 = 30.0; // Minimum world height (in meters) visible in the view
 
+#[derive(Component)]
+pub struct MainCamera;
+
 #[derive(Resource)]
 pub struct CameraState {
     pub following: bool,

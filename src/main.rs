@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::EguiPlugin;
 
 mod constants;
@@ -27,14 +27,23 @@ use visualization::{
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Lander Simulator".into(),
-                resolution: (1280., 720.).into(),
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Lander Simulator".into(),
+                        resolution: (1280., 720.).into(),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(LogPlugin {
+                    level: bevy::log::Level::DEBUG,
+                    filter: "info,wgpu_core=warn,wgpu_hal=warn,bevy_persistent::persistent=warn"
+                        .into(),
+                    ..default()
+                }),
+        )
         .add_plugins(EguiPlugin)
         .insert_resource(EditorState::default())
         .insert_resource(LanderState::default())
@@ -66,7 +75,8 @@ fn main() {
                     particle_system,
                     reset_lander_visibility,
                     visualization::reset_visualization_system,
-                    save_current_editor_state, // Renamed from autosave_editor_state
+                    save_current_editor_state,
+                    handle_escape,
                 )
                     .run_if(in_state(GameState::Playing)),
             ),
@@ -123,5 +133,26 @@ fn level_completion_check(
             popup.show = true;
             popup.completed_level = *level_num;
         }
+    }
+}
+
+fn handle_escape(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut state: ResMut<NextState<GameState>>,
+    editor_state: Res<EditorState>,
+    progress: ResMut<Persistent<LevelProgress>>,
+    current_level: Res<CurrentLevel>,
+    level_manager: Res<LevelManager>,
+) {
+    if keys.just_pressed(KeyCode::Escape) {
+        // Save current editor state before switching
+        if let Some((level_num, _)) = level_manager
+            .available_levels
+            .iter()
+            .find(|(_, name)| name == &current_level.config.name)
+        {
+            let _ = persistence::save_editor_state(*level_num, editor_state.code.clone(), progress);
+        }
+        state.set(GameState::LevelSelect);
     }
 }

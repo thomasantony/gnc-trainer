@@ -6,7 +6,7 @@ use crate::{
     levels::{ControlScheme, CurrentLevel, LevelManager},
     rhai_api::{ControlType, ScriptEngine},
     simulation::{reset_simulation, LanderState},
-    visualization::{self, CameraState, ResetVisibilityFlag, ResetVisualization},
+    visualization::{CameraState, ResetVisibilityFlag, ResetVisualization},
 };
 
 const CONSOLE_HEIGHT: f32 = 500.0;
@@ -258,19 +258,16 @@ pub fn ui_system(
                 ui.add_space(20.0);
 
                 // Rotation (only show for thrust vector control)
-                match current_level.config.control_scheme {
-                    ControlScheme::ThrustVector => {
-                        ui.vertical(|ui| {
-                            ui.label("Rotation:");
-                            ui.label(format!("Angle: {:.1}°", lander_state.rotation.to_degrees()));
-                            ui.label(format!(
-                                "Gimbal: {:.1}°",
-                                lander_state.gimbal_angle.to_degrees()
-                            ));
-                        });
-                        ui.add_space(20.0);
-                    }
-                    _ => {}
+                if let ControlScheme::ThrustVector = current_level.config.control_scheme {
+                    ui.vertical(|ui| {
+                        ui.label("Rotation:");
+                        ui.label(format!("Angle: {:.1}°", lander_state.rotation.to_degrees()));
+                        ui.label(format!(
+                            "Gimbal: {:.1}°",
+                            lander_state.gimbal_angle.to_degrees()
+                        ));
+                    });
+                    ui.add_space(20.0);
                 }
 
                 // Thrust and fuel

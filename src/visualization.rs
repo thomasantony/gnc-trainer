@@ -78,8 +78,8 @@ pub struct ResetVisualization(pub bool);
 pub fn reset_visualization_system(
     mut commands: Commands,
     mut reset_flag: ResMut<ResetVisualization>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    meshes: ResMut<Assets<Mesh>>,
+    materials: ResMut<Assets<ColorMaterial>>,
     level: Res<CurrentLevel>,
     query: Query<Entity, With<LevelSpecific>>,
 ) {

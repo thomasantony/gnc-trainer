@@ -81,7 +81,7 @@ impl Default for ScriptEngine {
 }
 
 thread_local! {
-    static CONSOLE_BUFFER: std::cell::RefCell<Vec<String>> = std::cell::RefCell::new(Vec::new());
+    static CONSOLE_BUFFER: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 impl ScriptEngine {

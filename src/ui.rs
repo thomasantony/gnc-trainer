@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use bevy_persistent::prelude::*;
-use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
+use egui_extras::syntax_highlighting;
 
 use crate::levels::{ControlScheme, CurrentLevel, LevelManager};
 use crate::persistence::{self, LevelProgress};
@@ -157,16 +157,30 @@ pub fn ui_system(
             egui::ScrollArea::vertical()
                 .max_height(CONSOLE_HEIGHT)
                 .show(ui, |ui| {
-                    CodeEditor::default()
-                        .id_source("code_editor")
-                        .with_rows(20)
-                        .with_fontsize(14.0)
-                        .with_theme(ColorTheme::GRUVBOX)
-                        .with_syntax(Syntax::rust())
-                        .with_numlines(true)
-                        .vscroll(true)
-                        .stick_to_bottom(true)
-                        .show(ui, &mut editor_state.code);
+                    let theme = syntax_highlighting::CodeTheme::from_memory(ui.ctx(), ui.style());
+
+                    // Create layouter for syntax highlighting
+                    let mut layouter = |ui: &egui::Ui, string: &str, wrap_width: f32| {
+                        let mut layout_job = syntax_highlighting::highlight(
+                            ui.ctx(),
+                            ui.style(),
+                            &theme,
+                            string,
+                            "rs", // Using Rust syntax highlighting
+                        );
+                        layout_job.wrap.max_width = wrap_width;
+                        ui.fonts(|f| f.layout_job(layout_job))
+                    };
+
+                    let editor = egui::TextEdit::multiline(&mut editor_state.code)
+                        .font(egui::TextStyle::Monospace)
+                        .code_editor()
+                        .desired_rows(20)
+                        .lock_focus(true)
+                        .desired_width(f32::INFINITY)
+                        .layouter(&mut layouter);
+
+                    ui.add(editor);
                     ui.add_space(8.0);
                 });
 

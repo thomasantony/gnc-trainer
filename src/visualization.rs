@@ -161,6 +161,7 @@ pub fn spawn_visualization(
             },
             Transform::from_xyz(screen_pos.x, GROUND_OFFSET + 5.0, 0.5),
             TargetZone,
+            LevelSpecific,
         ));
     }
 

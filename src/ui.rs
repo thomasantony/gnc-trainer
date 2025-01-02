@@ -49,14 +49,26 @@ pub fn ui_system(
     mut reset_vis: ResMut<ResetVisualization>,
     level_manager: Res<LevelManager>,
     mut state: ResMut<NextState<GameState>>,
+    progress: ResMut<Persistent<LevelProgress>>,
 ) {
     let new_level_number = None;
     let mut reset_requested = false;
 
-    // Top menu bar
+    // Top menu bar with level select button
     egui::TopBottomPanel::top("menu_bar").show(contexts.ctx_mut(), |ui| {
         egui::menu::bar(ui, |ui| {
             if ui.button("Level Select").clicked() {
+                if let Some((level_num, _)) = level_manager
+                    .available_levels
+                    .iter()
+                    .find(|(_, name)| name == &current_level.config.name)
+                {
+                    let _ = persistence::save_editor_state(
+                        *level_num,
+                        editor_state.code.clone(),
+                        progress,
+                    );
+                }
                 state.set(GameState::LevelSelect);
             }
         });

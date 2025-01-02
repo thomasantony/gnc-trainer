@@ -1,11 +1,11 @@
 (
     name: "Simple Lunar Landing",
-    description: "Land safely by controlling vertical thrust",
+    description: "Land safely (vertical speed < 2m/s) by controlling vertical thrust",
     physics: (
-        gravity: -1.62,    // lunar gravity
-        dry_mass: 300.0,    // dry mass
-        max_thrust: 1389.0,   // max thrust (3x 463N engines)
-        isp: 326.0,  // specific impulse
+        gravity: -1.62,     // lunar gravity, [m/s^2]
+        dry_mass: 300.0,    // [kg]
+        max_thrust: 1389.0,  // [N]
+        isp: 326.0,         // specific impulse [s]
     ),
     initial: (
         x0: 0.0,     // centered

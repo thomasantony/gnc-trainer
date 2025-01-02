@@ -15,6 +15,7 @@
     [ ] Landing with differential thrust (with horizontal motion)
     [ ] Precision landing with thrust vectoring
     [ ] Precision landing with differential thrust
+[ ] Sound effects
 [ ] Import from existing RHAI script file?
 [x] Explode on crash
-[ ] Save/Load solution files from user folder
+[ ] Save/Load solution files from user folder/browser storage

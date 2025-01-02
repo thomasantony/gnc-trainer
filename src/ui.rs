@@ -390,8 +390,11 @@ pub fn level_select_ui(
             }
 
             ui.add_space(20.0);
-            if ui.button("Exit").clicked() {
-                std::process::exit(0);
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                if ui.button("Exit").clicked() {
+                    std::process::exit(0);
+                }
             }
         });
     });

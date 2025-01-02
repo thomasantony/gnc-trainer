@@ -11,7 +11,7 @@ mod ui;
 mod visualization;
 
 use bevy_persistent::Persistent;
-use levels::{CurrentLevel, LevelManager};
+use levels::{CurrentLevel, GameLoadState, LevelManager, LevelPlugin};
 use particles::{particle_system, ParticleSpawnTimer};
 use persistence::{setup_persistence, LevelProgress};
 use rhai_api::ScriptEngine;
@@ -45,10 +45,9 @@ fn main() {
                 }),
         )
         .add_plugins(EguiPlugin)
+        .add_plugins(LevelPlugin) // Add the new plugin
         .insert_resource(EditorState::default())
         .insert_resource(LanderState::default())
-        .insert_resource(LevelManager::load())
-        .insert_resource(CurrentLevel::load(0))
         .insert_resource(ScriptEngine::default())
         .insert_resource(visualization::CameraState::default())
         .insert_resource(ResetVisibilityFlag::default())
@@ -60,7 +59,10 @@ fn main() {
         .init_state::<GameState>()
         .insert_resource(State::new(GameState::LevelSelect))
         .insert_resource(LevelCompletePopup::default())
-        .add_systems(Startup, (spawn_visualization, setup, setup_persistence))
+        .add_systems(
+            OnEnter(GameLoadState::Ready),
+            (setup, setup_persistence, spawn_visualization),
+        )
         .add_systems(Update, level_completion_check)
         .add_systems(
             Update,
@@ -79,7 +81,8 @@ fn main() {
                     handle_escape,
                 )
                     .run_if(in_state(GameState::Playing)),
-            ),
+            )
+                .run_if(in_state(GameLoadState::Ready)),
         )
         .run();
 }
@@ -87,11 +90,11 @@ fn main() {
 fn setup(
     mut commands: Commands,
     mut lander_state: ResMut<LanderState>,
-    level: Res<CurrentLevel>,
+    current_level: Res<CurrentLevel>,
     mut camera_state: ResMut<CameraState>,
 ) {
     commands.spawn((Camera2d, MainCamera));
-    reset_simulation(&mut lander_state, &level, &mut camera_state);
+    reset_simulation(&mut lander_state, &current_level, &mut camera_state);
 }
 
 fn run_simulation(state: Res<EditorState>, lander_state: Res<LanderState>) -> bool {

@@ -117,6 +117,7 @@ pub fn simulation_system(
     level: Res<CurrentLevel>,
     mut script_engine: ResMut<ScriptEngine>,
 ) {
+    // Only run simulation if we have a level config
     if !state.landed && !state.crashed {
         let dt = time.delta_secs();
 

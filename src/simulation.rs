@@ -221,6 +221,7 @@ pub fn simulation_system(
         let angular_acc = total_torque / MOMENT_OF_INERTIA;
         state.angular_vel += angular_acc * dt;
         state.rotation += state.angular_vel * dt;
+        state.rotation = state.rotation.sin().atan2(state.rotation.cos());
 
         // Update linear velocity and position using simple Euler integration
         let velocity = state.velocity;

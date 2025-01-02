@@ -33,10 +33,11 @@ fn main() {
         .insert_resource(EditorState::default())
         .insert_resource(LanderState::default())
         .insert_resource(LevelManager::load())
-        .insert_resource(CurrentLevel::load(1))
+        .insert_resource(CurrentLevel::load(0))
         .insert_resource(ScriptEngine::default())
         .insert_resource(visualization::CameraState::default())
         .insert_resource(ResetVisibilityFlag::default())
+        .insert_resource(visualization::ResetVisualization::default())
         .insert_resource(ParticleSpawnTimer(Timer::from_seconds(
             0.05,
             TimerMode::Repeating,
@@ -51,8 +52,9 @@ fn main() {
                 (
                     update_visualization,
                     update_grid_lines,
-                    particle_system, // Keep particle system
+                    particle_system,
                     reset_lander_visibility,
+                    visualization::reset_visualization_system,
                 ),
             ),
         )

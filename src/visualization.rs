@@ -72,6 +72,33 @@ fn create_triangle_mesh() -> Mesh {
     mesh
 }
 
+#[derive(Resource, Default)]
+pub struct ResetVisualization(pub bool);
+
+pub fn reset_visualization_system(
+    mut commands: Commands,
+    mut reset_flag: ResMut<ResetVisualization>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    level: Res<CurrentLevel>,
+    query: Query<Entity, With<LevelSpecific>>,
+) {
+    if reset_flag.0 {
+        // Cleanup
+        for entity in query.iter() {
+            commands.entity(entity).despawn();
+        }
+
+        // Respawn
+        spawn_visualization(commands, meshes, materials, level);
+
+        reset_flag.0 = false;
+    }
+}
+
+#[derive(Component)]
+pub struct LevelSpecific;
+
 pub fn spawn_visualization(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -81,9 +108,8 @@ pub fn spawn_visualization(
     commands.insert_resource(CameraState::default());
     let center_offset = -(RIGHT_PANEL_WIDTH / 2.0);
     let config = &level.config;
-    let initial_pos = Vec2::new(config.initial.x0, config.initial.y0);
 
-    // Spawn ground that extends beyond view
+    // Spawn ground
     let ground_width = 10000.0;
     commands.spawn((
         Sprite {
@@ -97,80 +123,59 @@ pub fn spawn_visualization(
             0.25,
         ),
         Ground,
+        LevelSpecific,
     ));
 
-    // Spawn success zone based on reference type
-    match config.success.position_box.reference {
-        Reference::Initial => {
-            // For hover/positioning challenges
-            let box_width = (config.success.position_box.x_max - config.success.position_box.x_min)
-                * WORLD_TO_SCREEN_SCALE;
-            let box_height = (config.success.position_box.y_max
-                - config.success.position_box.y_min)
-                * WORLD_TO_SCREEN_SCALE;
+    // Spawn success zone
+    let initial_pos = Vec2::new(config.initial.x0, config.initial.y0);
+    let screen_pos = world_to_screen(initial_pos, Vec2::ZERO);
 
-            // Initial position in screen space
-            let screen_pos = world_to_screen(initial_pos, Vec2::ZERO);
+    // Get dimensions from level config
+    let zone_width = (config.success.position_box.x_max - config.success.position_box.x_min)
+        * WORLD_TO_SCREEN_SCALE;
+    let zone_height = (config.success.position_box.y_max - config.success.position_box.y_min)
+        * WORLD_TO_SCREEN_SCALE;
 
-            commands.spawn((
-                Sprite {
-                    color: Color::srgba(0.0, 0.5, 0.0, 0.2),
-                    custom_size: Some(Vec2::new(box_width.max(1.0), box_height.max(1.0))),
-                    ..default()
-                },
-                Transform::from_xyz(screen_pos.x, screen_pos.y, 0.5),
-                TargetZone, // Renamed from TargetZone
-            ));
-        }
-        Reference::Absolute => {
-            // For landing challenges
-            let landing_width = (config.success.position_box.x_max
-                - config.success.position_box.x_min)
-                * WORLD_TO_SCREEN_SCALE;
-            let landing_center_x =
-                (config.success.position_box.x_max + config.success.position_box.x_min) / 2.0;
-
-            commands.spawn((
-                Sprite {
-                    color: Color::srgba(0.0, 0.5, 0.0, 0.2),
-                    custom_size: Some(Vec2::new(landing_width.max(1.0), 10.0)),
-                    ..default()
-                },
-                Transform::from_xyz(
-                    center_offset + landing_center_x * WORLD_TO_SCREEN_SCALE,
-                    GROUND_OFFSET + 5.0,
-                    0.5,
-                ),
-                TargetZone, // Renamed from TargetZone
-            ));
-        }
-    }
-
-    // Spawn failure bounds if they exist
-    if let Some(bounds) = &config.failure.bounds {
-        let bounds_width = (bounds.x_max - bounds.x_min) * WORLD_TO_SCREEN_SCALE;
-        let bounds_height = (bounds.y_max - bounds.y_min) * WORLD_TO_SCREEN_SCALE;
-
-        let world_pos = match bounds.reference {
-            Reference::Absolute => Vec2::new(
-                (bounds.x_max + bounds.x_min) / 2.0,
-                (bounds.y_max + bounds.y_min) / 2.0,
-            ),
-            Reference::Initial => initial_pos,
-        };
-
-        let screen_pos = world_to_screen(world_pos, Vec2::ZERO);
-
+    if let Reference::Initial = config.success.position_box.reference {
+        // Hover-type target zone
         commands.spawn((
             Sprite {
-                color: Color::srgba(0.8, 0.0, 0.0, 0.1),
-                custom_size: Some(Vec2::new(bounds_width.max(1.0), bounds_height.max(1.0))),
+                color: Color::srgba(0.0, 0.5, 0.0, 0.2),
+                custom_size: Some(Vec2::new(zone_width.max(1.0), zone_height.max(1.0))),
                 ..default()
             },
-            Transform::from_xyz(screen_pos.x, screen_pos.y, 0.4),
-            TargetZone, // Renamed from TargetZone
+            Transform::from_xyz(screen_pos.x, screen_pos.y, 0.5),
+            TargetZone,
+            LevelSpecific,
+        ));
+    } else {
+        // Landing strip
+        commands.spawn((
+            Sprite {
+                color: Color::srgba(0.0, 0.5, 0.0, 0.2),
+                custom_size: Some(Vec2::new(zone_width.max(1.0), 10.0)),
+                ..default()
+            },
+            Transform::from_xyz(screen_pos.x, GROUND_OFFSET + 5.0, 0.5),
+            TargetZone,
         ));
     }
+
+    // // Spawn failure bounds if they exist
+    // if let Some(bounds) = &config.failure.bounds {
+    //     let bounds_width = (bounds.x_max - bounds.x_min) * WORLD_TO_SCREEN_SCALE;
+    //     let bounds_height = (bounds.y_max - bounds.y_min) * WORLD_TO_SCREEN_SCALE;
+
+    //     commands.spawn((
+    //         Sprite {
+    //             color: Color::srgba(0.8, 0.0, 0.0, 0.1),
+    //             custom_size: Some(Vec2::new(bounds_width.max(1.0), bounds_height.max(1.0))),
+    //             ..default()
+    //         },
+    //         Transform::from_xyz(screen_pos.x, screen_pos.y, 0.4),
+    //         TargetZone,
+    //     ));
+    // }
 
     // Spawn lander
     commands.spawn((
@@ -182,6 +187,7 @@ pub fn spawn_visualization(
             scale: Vec3::ONE,
         },
         Lander,
+        LevelSpecific,
     ));
 }
 
@@ -344,9 +350,9 @@ pub fn update_visualization(
         transform.rotation = Quat::from_rotation_z(lander_state.rotation);
     }
 
-    // Update ground and landing zone positions
+    // Update ground and zone positions
     let mut ground_query = query_set.p1();
-    for (mut transform, sprite, landing_zone, ground) in ground_query.iter_mut() {
+    for (mut transform, sprite, target_zone, ground) in ground_query.iter_mut() {
         if ground.is_some() {
             // Ground uses same position as landing zone
             let landing_center = Vec2::new(
@@ -360,16 +366,29 @@ pub fn update_visualization(
             if let Some(size) = sprite.custom_size {
                 transform.translation.y = screen_pos.y - (size.y / 2.0);
             }
-        } else if landing_zone.is_some() {
-            // Landing zone centered on success zone
-            let landing_zone_pos = Vec2::new(
-                (level.config.success.position_box.x_min + level.config.success.position_box.x_max)
-                    / 2.0,
-                0.0,
-            );
-            let screen_pos = world_to_screen(landing_zone_pos, offset);
-            transform.translation.x = screen_pos.x;
-            transform.translation.y = screen_pos.y + 5.0; // Slight offset to stay above ground
+        } else if target_zone.is_some() {
+            // Only update position if this is an absolute reference zone
+            match level.config.success.position_box.reference {
+                Reference::Absolute => {
+                    // Landing zone centered on success zone
+                    let landing_zone_pos = Vec2::new(
+                        (level.config.success.position_box.x_min
+                            + level.config.success.position_box.x_max)
+                            / 2.0,
+                        0.0,
+                    );
+                    let screen_pos = world_to_screen(landing_zone_pos, offset);
+                    transform.translation.x = screen_pos.x;
+                    transform.translation.y = screen_pos.y + 5.0; // Slight offset to stay above ground
+                }
+                Reference::Initial => {
+                    // For hover target, track initial position
+                    let initial_pos = Vec2::new(level.config.initial.x0, level.config.initial.y0);
+                    let screen_pos = world_to_screen(initial_pos, offset);
+                    transform.translation.x = screen_pos.x;
+                    transform.translation.y = screen_pos.y;
+                }
+            }
         }
     }
 }

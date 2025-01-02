@@ -6,7 +6,7 @@ use crate::{
     levels::{ControlScheme, CurrentLevel, LevelManager},
     rhai_api::{ControlType, ScriptEngine},
     simulation::{reset_simulation, LanderState},
-    visualization::{CameraState, ResetVisibilityFlag},
+    visualization::{self, CameraState, ResetVisibilityFlag, ResetVisualization},
 };
 
 const CONSOLE_HEIGHT: f32 = 500.0;
@@ -46,6 +46,7 @@ pub fn ui_system(
     mut current_level: ResMut<CurrentLevel>,
     mut camera_state: ResMut<CameraState>,
     mut reset_flag: ResMut<ResetVisibilityFlag>,
+    mut reset_vis: ResMut<ResetVisualization>,
     level_manager: Res<LevelManager>,
 ) {
     let mut reset_requested = false;
@@ -70,7 +71,7 @@ pub fn ui_system(
         if let Some(new_config) = level_manager.get_level(level_num) {
             editor_state.simulation_state = SimulationState::Stopped;
             script_engine.error_message = None;
-            editor_state.last_console_output.clear(); // Clear console history on level change
+            editor_state.last_console_output.clear();
 
             // Update current level
             current_level.config = new_config.clone();
@@ -91,7 +92,8 @@ pub fn ui_system(
             }
 
             reset_simulation(&mut lander_state, &current_level, &mut camera_state);
-            reset_flag.0 = true; // Set the reset flag to make the lander visible again
+            reset_flag.0 = true; // Reset lander visibility
+            reset_vis.0 = true; // Reset visualization
         }
     }
 

@@ -1,11 +1,11 @@
 (
     name: "Hover Test",
-    description: "Maintain your position within ±1m of the starting point for 10 seconds. Stay upright! Going outside the target zone will end the simulation.",
+    description: "Maintain your position within ±1m of the starting point for 30 seconds. Stay upright! Going outside the target zone will end the simulation.",
     physics: (
         gravity: -1.62,     // lunar gravity, [m/s^2]
-        dry_mass: 100.0,    // [kg]
-        max_thrust: 600.0,  // [N]
-        isp: 326.0,         // specific impulse [s]
+        dry_mass: 50.0,    // [kg]
+        max_thrust: 120.0,  // [N]
+        isp: 100.0,         // specific impulse [s]
     ),
     initial: (
         x0: 0.0,
@@ -13,7 +13,7 @@
         vx0: 0.0,
         vy0: 0.0,
         initial_angle: 0.0,
-        initial_fuel: 50.0
+        initial_fuel: 10.0
     ),
     success: (
         vx_max: 0.5,
@@ -27,7 +27,7 @@
         ),
         final_angle: 0.0,
         angle_tolerance: 0.1,
-        persistence_period: 10.0
+        persistence_period: 30.0
     ),
     failure: (
         ground_collision: true,
@@ -41,5 +41,5 @@
     ),
     control_scheme: VerticalOnly,
     success_message: "Great job! You maintained a stable hover.",
-    failure_message: "Mission failed! The lander moved outside the permitted zone.",
+    failure_message: "Mission failed! The spacecraft moved outside the permitted zone.",
 )

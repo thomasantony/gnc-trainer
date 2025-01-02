@@ -11,6 +11,8 @@ rand = "0.8"
 rhai = { version = "1.16", features = ["sync"] }
 serde = { version = "1.0", features = ["derive"] }
 ron = "0.8.1"
+bevy-persistent = { version = "0.7.0", features = ["all"] }
+dirs = "5.0.1"
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]

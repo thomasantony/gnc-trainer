@@ -1,13 +1,13 @@
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
+use bevy_persistent::prelude::*;
 use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
 
-use crate::{
-    levels::{ControlScheme, CurrentLevel, LevelManager},
-    rhai_api::{ControlType, ScriptEngine},
-    simulation::{reset_simulation, LanderState},
-    visualization::{CameraState, ResetVisibilityFlag, ResetVisualization},
-};
+use crate::levels::{ControlScheme, CurrentLevel, LevelManager};
+use crate::persistence::{self, LevelProgress};
+use crate::rhai_api::{ControlType, ScriptEngine};
+use crate::simulation::{reset_simulation, LanderState};
+use crate::visualization::{CameraState, ResetVisibilityFlag, ResetVisualization};
 
 const CONSOLE_HEIGHT: f32 = 500.0;
 
@@ -48,21 +48,17 @@ pub fn ui_system(
     mut reset_flag: ResMut<ResetVisibilityFlag>,
     mut reset_vis: ResMut<ResetVisualization>,
     level_manager: Res<LevelManager>,
+    mut state: ResMut<NextState<GameState>>,
 ) {
+    let new_level_number = None;
     let mut reset_requested = false;
-    let mut new_level_number = None;
 
     // Top menu bar
     egui::TopBottomPanel::top("menu_bar").show(contexts.ctx_mut(), |ui| {
         egui::menu::bar(ui, |ui| {
-            ui.menu_button("Levels", |ui| {
-                for (number, name) in &level_manager.available_levels {
-                    if ui.button(format!("Level {}: {}", number, name)).clicked() {
-                        new_level_number = Some(*number);
-                        ui.close_menu();
-                    }
-                }
-            });
+            if ui.button("Level Select").clicked() {
+                state.set(GameState::LevelSelect);
+            }
         });
     });
 
@@ -289,5 +285,132 @@ pub fn ui_system(
         editor_state.last_console_output.clear(); // Clear console history on reset
         reset_simulation(&mut lander_state, &current_level, &mut camera_state);
         reset_flag.0 = true; // Set the flag to trigger visibility reset
+    }
+}
+
+// Level selection UI
+
+#[derive(States, Default, Debug, Clone, Eq, PartialEq, Hash)]
+pub enum GameState {
+    #[default]
+    LevelSelect,
+    Playing,
+}
+
+#[derive(Resource)]
+pub struct LevelCompletePopup {
+    pub show: bool,
+    pub completed_level: usize,
+}
+
+impl Default for LevelCompletePopup {
+    fn default() -> Self {
+        Self {
+            show: false,
+            completed_level: 0,
+        }
+    }
+}
+
+pub fn level_select_ui(
+    mut contexts: EguiContexts,
+    level_manager: Res<LevelManager>,
+    progress: Res<Persistent<LevelProgress>>,
+    mut editor_state: ResMut<EditorState>,
+    mut current_level: ResMut<CurrentLevel>,
+    mut state: ResMut<NextState<GameState>>,
+    mut camera_state: ResMut<CameraState>,
+    mut lander_state: ResMut<LanderState>,
+    mut reset_flag: ResMut<ResetVisibilityFlag>,
+    mut reset_vis: ResMut<ResetVisualization>,
+    mut script_engine: ResMut<ScriptEngine>,
+) {
+    egui::CentralPanel::default().show(contexts.ctx_mut(), |ui| {
+        ui.vertical_centered(|ui| {
+            ui.heading("Level Select");
+            ui.add_space(20.0);
+
+            for (number, name) in &level_manager.available_levels {
+                let available = persistence::is_level_available(*number, &progress);
+                let completed = persistence::is_level_completed(*number, &progress);
+
+                let text = format!("Level {}: {}", number, name);
+                let mut button = egui::Button::new(text);
+
+                if !available {
+                    button = button.fill(egui::Color32::DARK_GRAY);
+                } else if completed {
+                    button = button.fill(egui::Color32::DARK_GREEN);
+                }
+
+                if available && ui.add(button).clicked() {
+                    if let Some(new_config) = level_manager.get_level(*number) {
+                        editor_state.simulation_state = SimulationState::Stopped;
+                        current_level.config = new_config.clone();
+
+                        // Update script engine control type
+                        match new_config.control_scheme {
+                            ControlScheme::VerticalOnly => {
+                                script_engine.set_control_type(ControlType::Simple)
+                            }
+                            ControlScheme::ThrustVector => {
+                                script_engine.set_control_type(ControlType::Vectored)
+                            }
+                        }
+
+                        // Load saved code or default
+                        if let Some(saved_code) = persistence::get_editor_state(*number, &progress)
+                        {
+                            editor_state.code = saved_code;
+                        } else if let Ok(script) = std::fs::read_to_string(format!(
+                            "assets/scripts/level{}_default.rhai",
+                            number
+                        )) {
+                            editor_state.code = script;
+                        }
+
+                        reset_simulation(&mut lander_state, &current_level, &mut camera_state);
+                        reset_flag.0 = true;
+                        reset_vis.0 = true;
+                        state.set(GameState::Playing);
+                    }
+                }
+            }
+
+            ui.add_space(20.0);
+            if ui.button("Exit").clicked() {
+                std::process::exit(0);
+            }
+        });
+    });
+}
+
+pub fn level_complete_popup(
+    mut contexts: EguiContexts,
+    mut popup: ResMut<LevelCompletePopup>,
+    mut editor_state: ResMut<EditorState>,
+    mut state: ResMut<NextState<GameState>>,
+) {
+    if popup.show {
+        editor_state.simulation_state = SimulationState::Paused;
+
+        egui::Window::new("Level Complete!")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(contexts.ctx_mut(), |ui| {
+                ui.label("Congratulations! You've completed this level!");
+                ui.add_space(8.0);
+
+                ui.horizontal(|ui| {
+                    if ui.button("Continue").clicked() {
+                        popup.show = false;
+                        state.set(GameState::LevelSelect);
+                    }
+                    if ui.button("Go back").clicked() {
+                        popup.show = false;
+                    }
+                });
+            });
     }
 }

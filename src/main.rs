@@ -67,7 +67,7 @@ fn setup(
     level: Res<CurrentLevel>,
     mut camera_state: ResMut<CameraState>,
 ) {
-    commands.spawn(Camera2d::default());
+    commands.spawn(Camera2d);
     reset_simulation(&mut lander_state, &level, &mut camera_state);
 }
 

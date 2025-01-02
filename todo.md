@@ -1,5 +1,6 @@
 [x] Add attitude constraint for winning condition
     [x] Add stability for some time, i.e., persistence of win condition
+[x] Add dynamic target/landing zones based on level definition
 [ ] Level selector with persistance of past pass/fail states
     [ ] Show this on startup instead of main UI
     [ ] Popup UI if level fails
@@ -8,7 +9,7 @@
     [ ] Also store what solution file was used to pass the level
     [ ] Lock future levels until levels before that are passed
 [ ] New levels
-    [ ] Hover
+    [x] Hover
     [ ] Attitude control using thrust vectoring
     [ ] Attitude control using differential thrust
     [ ] Landing with differential thrust (with horizontal motion)

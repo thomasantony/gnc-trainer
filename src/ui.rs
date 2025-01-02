@@ -50,6 +50,7 @@ pub fn ui_system(
     level_manager: Res<LevelManager>,
     mut state: ResMut<NextState<GameState>>,
     progress: ResMut<Persistent<LevelProgress>>,
+    mut popup: ResMut<LevelCompletePopup>,
 ) {
     let new_level_number = None;
     let mut reset_requested = false;
@@ -69,6 +70,7 @@ pub fn ui_system(
                         progress,
                     );
                 }
+                popup.show = false;
                 state.set(GameState::LevelSelect);
             }
         });
@@ -427,5 +429,28 @@ pub fn level_complete_popup(
                     }
                 });
             });
+    }
+}
+
+pub(crate) fn handle_escape(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut state: ResMut<NextState<GameState>>,
+    editor_state: Res<EditorState>,
+    progress: ResMut<Persistent<LevelProgress>>,
+    current_level: Res<CurrentLevel>,
+    level_manager: Res<LevelManager>,
+    mut popup: ResMut<LevelCompletePopup>,
+) {
+    if keys.just_pressed(KeyCode::Escape) {
+        // Save current editor state before switching
+        if let Some((level_num, _)) = level_manager
+            .available_levels
+            .iter()
+            .find(|(_, name)| name == &current_level.config.name)
+        {
+            let _ = persistence::save_editor_state(*level_num, editor_state.code.clone(), progress);
+        }
+        popup.show = false;
+        state.set(GameState::LevelSelect);
     }
 }

@@ -17,8 +17,8 @@ use persistence::{setup_persistence, LevelProgress};
 use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState};
 use ui::{
-    level_complete_popup, level_select_ui, ui_system, EditorState, GameState, LevelCompletePopup,
-    SimulationState,
+    handle_escape, level_complete_popup, level_select_ui, ui_system, EditorState, GameState,
+    LevelCompletePopup, SimulationState,
 };
 use visualization::{
     reset_lander_visibility, spawn_visualization, update_grid_lines, update_visualization,
@@ -135,26 +135,5 @@ fn level_completion_check(
             popup.show = true;
             popup.completed_level = *level_num;
         }
-    }
-}
-
-fn handle_escape(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut state: ResMut<NextState<GameState>>,
-    editor_state: Res<EditorState>,
-    progress: ResMut<Persistent<LevelProgress>>,
-    current_level: Res<CurrentLevel>,
-    level_manager: Res<LevelManager>,
-) {
-    if keys.just_pressed(KeyCode::Escape) {
-        // Save current editor state before switching
-        if let Some((level_num, _)) = level_manager
-            .available_levels
-            .iter()
-            .find(|(_, name)| name == &current_level.config.name)
-        {
-            let _ = persistence::save_editor_state(*level_num, editor_state.code.clone(), progress);
-        }
-        state.set(GameState::LevelSelect);
     }
 }

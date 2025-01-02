@@ -63,7 +63,6 @@ fn main() {
             OnEnter(GameLoadState::Ready),
             (setup, setup_persistence, spawn_visualization),
         )
-        .add_systems(Update, level_completion_check)
         .add_systems(
             Update,
             (
@@ -77,7 +76,7 @@ fn main() {
                     particle_system,
                     reset_lander_visibility,
                     visualization::reset_visualization_system,
-                    save_current_editor_state,
+                    (level_completion_check, save_current_editor_state).chain(),
                     handle_escape,
                 )
                     .run_if(in_state(GameState::Playing)),

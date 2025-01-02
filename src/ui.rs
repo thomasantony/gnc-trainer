@@ -24,7 +24,8 @@ pub struct EditorState {
     pub code: String,
     pub simulation_state: SimulationState,
     pub console_height: f32,
-    pub last_console_output: Vec<String>, // Store persistent console history
+    pub last_console_output: Vec<String>,
+    pub show_reset_confirmation: bool,
 }
 
 impl Default for EditorState {
@@ -34,6 +35,7 @@ impl Default for EditorState {
             simulation_state: SimulationState::Stopped,
             console_height: 150.0,
             last_console_output: Vec::new(),
+            show_reset_confirmation: false,
         }
     }
 }
@@ -238,8 +240,12 @@ pub fn ui_system(
                     }
                 }
 
-                if ui.button("Reset").clicked() {
+                if ui.button("Reset Simulation").clicked() {
                     reset_requested = true;
+                }
+
+                if ui.button("Reset Code").clicked() {
+                    editor_state.show_reset_confirmation = true;
                 }
             });
         });
@@ -291,6 +297,38 @@ pub fn ui_system(
                 });
             });
         });
+
+    // Add the confirmation dialog
+    if editor_state.show_reset_confirmation {
+        egui::Window::new("Confirm Reset")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(contexts.ctx_mut(), |ui| {
+                ui.label("Are you sure you want to reset the code to the default script?");
+                ui.horizontal(|ui| {
+                    if ui.button("Yes").clicked() {
+                        // Load default script for current level
+                        if let Some((level_num, _)) = level_manager
+                            .available_levels
+                            .iter()
+                            .find(|(_, name)| name == &current_level.config.name)
+                        {
+                            if let Ok(script) = std::fs::read_to_string(format!(
+                                "assets/scripts/level{}_default.rhai",
+                                level_num
+                            )) {
+                                editor_state.code = script;
+                            }
+                        }
+                        editor_state.show_reset_confirmation = false;
+                    }
+                    if ui.button("No").clicked() {
+                        editor_state.show_reset_confirmation = false;
+                    }
+                });
+            });
+    }
 
     // Handle reset request
     if reset_requested {

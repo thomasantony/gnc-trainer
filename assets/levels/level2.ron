@@ -1,11 +1,11 @@
 (
     name: "Thrust Vectoring for Lunar Landing",
-    description: "Control horizontal motion and land safely using thrust vectoring",
+    description: "Control horizontal motion and land safely (vx < 1 m/s, vy < 2 m/s) using thrust vectoring",
     physics: (
-        gravity: -1.62,    // lunar gravity
-        dry_mass: 300.0,    // dry mass
-        max_thrust: 1389.0,   // max thrust
-        isp: 326.0,  // specific impulse
+        gravity: -1.62,     // lunar gravity, [m/s^2]
+        dry_mass: 300.0,    // [kg]
+        max_thrust: 1389.0,  // [N]
+        isp: 326.0,         // specific impulse [s]
     ),
     initial: (
         x0: 0.0,   // start left of target
@@ -27,7 +27,7 @@
         ),
         final_angle: 0.0,
         angle_tolerance: 0.1,
-        persistence_period: 1.0,
+        persistence_period: 5.0,
     ),
     failure: (
         ground_collision: false,  // We handle hard landings via velocity constraints

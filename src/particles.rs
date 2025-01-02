@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use rand::Rng;
 
 use crate::simulation::LanderState;
-use crate::visualization::{world_to_screen, CameraState};
+use crate::visualization::{world_to_screen, CameraState, LevelSpecific};
 
 // Constants for particle system
 const PARTICLE_LIFETIME: f32 = 0.5;
@@ -61,6 +61,7 @@ fn spawn_particle(
             velocity: angle * speed,
             world_pos,
         },
+        LevelSpecific,
     ));
 }
 
@@ -97,6 +98,7 @@ pub fn kaboom(
                 velocity: velocity + lander_vel,
                 world_pos: lander_pos,
             },
+            LevelSpecific,
         ));
     }
 }

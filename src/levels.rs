@@ -71,13 +71,9 @@ pub struct LevelConfig {
     pub failure_message: String,
 }
 
-#[derive(Default, Resource)]
-pub struct LevelManager {
-    pub levels: HashMap<usize, LevelConfig>,
-    pub available_levels: Vec<(usize, String)>, // (level number, name)
-    loading: bool,
-    #[allow(dead_code)]
-    handles: Vec<Handle<RonAsset>>, // Keep handles alive
+#[derive(Debug, Deserialize)]
+pub struct LevelList {
+    pub levels: Vec<String>, // List of level file names without extension
 }
 
 // Asset loader for RON files
@@ -110,22 +106,44 @@ impl AssetLoader for RonAssetLoader {
         &["ron"]
     }
 }
-
+#[derive(Default, Resource)]
+pub struct LevelManager {
+    pub levels: HashMap<usize, LevelConfig>,
+    pub available_levels: Vec<(usize, String)>, // (level number, name)
+    loading: bool,
+    #[allow(dead_code)]
+    level_handles: Vec<Handle<RonAsset>>,
+    level_list: Option<LevelList>,
+    loaded_configs: Vec<(usize, LevelConfig)>, // Temporary storage for loaded configs
+}
 impl LevelManager {
     pub fn new() -> Self {
         Self {
             levels: HashMap::new(),
             available_levels: Vec::new(),
             loading: true,
-            handles: Vec::new(),
+            level_handles: Vec::new(),
+            level_list: None,
+            loaded_configs: Vec::new(),
         }
     }
 
-    pub fn process_level(&mut self, level_num: usize, content: &str) {
-        if let Ok(config) = ron::de::from_str::<LevelConfig>(content) {
-            self.available_levels.push((level_num, config.name.clone()));
-            self.levels.insert(level_num, config);
+    // Sort and finalize loaded levels
+    fn finalize_loading(&mut self) {
+        // Sort loaded configs by index
+        self.loaded_configs.sort_by_key(|(idx, _)| *idx);
+
+        // Clear existing data
+        self.levels.clear();
+        self.available_levels.clear();
+
+        // Insert in correct order
+        for (idx, config) in self.loaded_configs.drain(..) {
+            self.available_levels.push((idx, config.name.clone()));
+            self.levels.insert(idx, config);
         }
+
+        self.loading = false;
     }
 
     pub fn get_level(&self, number: usize) -> Option<LevelConfig> {
@@ -145,42 +163,61 @@ impl LevelManager {
 pub struct CurrentLevel {
     pub config: LevelConfig,
 }
-
-// System to load level files
 pub fn load_levels(
     mut level_manager: ResMut<LevelManager>,
     asset_server: Res<AssetServer>,
     ron_assets: Res<Assets<RonAsset>>,
     mut ev_asset: EventReader<AssetEvent<RonAsset>>,
 ) {
-    // Process any asset events
     for ev in ev_asset.read() {
-        match ev {
-            AssetEvent::LoadedWithDependencies { id } => {
-                if let Some(asset) = ron_assets.get(*id) {
-                    // Extract level number from handle
-                    if let Some(path) = asset_server.get_path(*id) {
-                        let path_str = path.path().to_string_lossy();
-                        // Look for "levelX.ron" in the path
+        if let AssetEvent::LoadedWithDependencies { id } = ev {
+            if let Some(asset) = ron_assets.get(*id) {
+                if let Some(path) = asset_server.get_path(*id) {
+                    let path_str = path.path().to_string_lossy();
+
+                    // Check if this is the level list
+                    if path_str.ends_with("level_list.ron") {
+                        if let Ok(list) = ron::de::from_str::<LevelList>(&asset.0) {
+                            // Load all levels from the list
+                            for level_file in &list.levels {
+                                let handle = asset_server
+                                    .load::<RonAsset>(format!("levels/{}.ron", level_file));
+                                level_manager.level_handles.push(handle);
+                            }
+                            level_manager.level_list = Some(list);
+                        }
+                    } else if path_str.contains("level") && path_str.ends_with(".ron") {
+                        // Process individual level file
                         if let Some(file_name) = path_str.split('/').last() {
-                            if file_name.starts_with("level") && file_name.ends_with(".ron") {
-                                // Extract number between "level" and ".ron"
-                                if let Ok(num) = file_name[5..file_name.len() - 4].parse::<usize>()
-                                {
-                                    level_manager.process_level(num, &asset.0);
+                            if let Ok(config) = ron::de::from_str::<LevelConfig>(&asset.0) {
+                                // Get level index from level list
+                                if let Some(list) = &level_manager.level_list {
+                                    if let Some(index) = list
+                                        .levels
+                                        .iter()
+                                        .position(|name| format!("{}.ron", name) == file_name)
+                                    {
+                                        // Store in temporary vector instead of inserting directly
+                                        level_manager.loaded_configs.push((index, config));
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-            _ => {}
         }
     }
 
-    // Check if all expected levels are loaded
-    if level_manager.is_loading() && !level_manager.available_levels.is_empty() {
-        level_manager.mark_loaded();
+    // Check if loading is complete
+    if level_manager.is_loading()
+        && level_manager.level_list.is_some()
+        && !level_manager.loaded_configs.is_empty()
+        && level_manager.loaded_configs.len()
+            == level_manager.level_list.as_ref().unwrap().levels.len()
+    {
+        // Finalize loading by sorting and inserting in correct order
+        level_manager.finalize_loading();
     }
 }
 
@@ -225,15 +262,11 @@ fn check_loading_complete(
 }
 
 fn setup_levels(mut commands: Commands, asset_server: Res<AssetServer>) {
-    // Create level manager with handles
     let mut level_manager = LevelManager::new();
 
-    // Load all potential level files
-    for i in 0..=10 {
-        let path = format!("levels/level{}.ron", i);
-        let handle = asset_server.load::<RonAsset>(path);
-        level_manager.handles.push(handle);
-    }
+    // First load the level list
+    let list_handle = asset_server.load::<RonAsset>("levels/level_list.ron");
+    level_manager.level_handles.push(list_handle);
 
     commands.insert_resource(level_manager);
 }

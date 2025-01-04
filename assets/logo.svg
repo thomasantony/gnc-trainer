@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <!-- Define the path for text to follow -->
+    <path id="textPath" d="M10,50 A40,40 0 1,1 90,50" fill="none"/>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="45" fill="#2C3E50"/>
+
+  <!-- Orbital path -->
+  <ellipse cx="50" cy="50" rx="35" ry="35" fill="none" stroke="#3498DB" stroke-width="2" transform="rotate(-30 50 50)"/>
+
+  <!-- Navigation crosshair -->
+  <path d="M50 20 L50 35 M50 65 L50 80 M20 50 L35 50 M65 50 L80 50" stroke="#E74C3C" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Center dot -->
+  <circle cx="50" cy="50" r="4" fill="#2ECC71"/>
+
+  <!-- Curved text -->
+  <text>
+    <textPath href="#textPath" font-family="Arial" font-size="4" fill="white" font-weight="bold" text-anchor="middle" startOffset="50%">
+      GNC TRAINER
+    </textPath>
+  </text>
+</svg>

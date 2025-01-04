@@ -18,3 +18,6 @@
 [ ] Import from existing RHAI script file?
 [x] Explode on crash
 [x] Save/Load solution files from user folder/browser storage
+[ ] Add trunk.rs support
+[ ] Add github action to trigger deploy on website repo
+[ ] Update website repo to checkout, build, deploy the game

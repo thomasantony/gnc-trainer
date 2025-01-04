@@ -42,6 +42,14 @@ fn main() {
                     filter: "info,wgpu_core=warn,wgpu_hal=warn,bevy_persistent::persistent=warn"
                         .into(),
                     ..default()
+                })
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        // You may want this set to `true` if you need virtual keyboard work in mobile browsers.
+                        prevent_default_event_handling: false,
+                        ..default()
+                    }),
+                    ..default()
                 }),
         )
         .add_plugins(EguiPlugin)

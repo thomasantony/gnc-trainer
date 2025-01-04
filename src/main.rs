@@ -1,4 +1,4 @@
-use bevy::{log::LogPlugin, prelude::*};
+use bevy::{asset::AssetMetaCheck, log::LogPlugin, prelude::*};
 use bevy_egui::EguiPlugin;
 
 mod constants;
@@ -50,10 +50,14 @@ fn main() {
                         ..default()
                     }),
                     ..default()
+                })
+                .set(AssetPlugin {
+                    meta_check: AssetMetaCheck::Never,
+                    ..default()
                 }),
         )
         .add_plugins(EguiPlugin)
-        .add_plugins(LevelPlugin) // Add the new plugin
+        .add_plugins(LevelPlugin)
         .insert_resource(EditorState::default())
         .insert_resource(LanderState::default())
         .insert_resource(ScriptEngine::default())

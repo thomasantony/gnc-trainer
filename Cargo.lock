@@ -2570,6 +2570,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "gnc-trainer"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy-persistent",
+ "bevy_egui",
+ "dirs",
+ "egui_extras",
+ "js-sys",
+ "parking_lot 0.11.2",
+ "rand",
+ "rfd",
+ "rhai",
+ "ron",
+ "serde",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "gobject-sys"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5096,26 +5116,6 @@ name = "unsafe-libyaml"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
-
-[[package]]
-name = "untitled-space-game"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy-persistent",
- "bevy_egui",
- "dirs",
- "egui_extras",
- "js-sys",
- "parking_lot 0.11.2",
- "rand",
- "rfd",
- "rhai",
- "ron",
- "serde",
- "wasm-bindgen",
- "web-sys",
-]
 
 [[package]]
 name = "url"

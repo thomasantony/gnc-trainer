@@ -8,15 +8,9 @@ fi
 VERSION=$1
 trunk build --release
 
+# Install with `cargo binstall wasm-opt`
 FILENAME=$(ls ./dist/*.wasm | head -n1)
 wasm-opt -O -ol 100 -s 100 $FILENAME -o $FILENAME
 
 # Tar contents of dist/ but not the directory itself
 tar -czf "gnc-trainer-$VERSION.tar.gz" -C dist .
-
-# Publish the tarball to the releases page on Github
-# Create a new release
-
-# Use `brew install gh`  to install gh
-# Assumes that GH_TOKEN is set in the environment
-gh release create $VERSION "gnc-trainer-$VERSION.tar.gz" --title "Release $VERSION"

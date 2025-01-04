@@ -31,8 +31,11 @@ fn main() {
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
-                        title: "Lander Simulator".into(),
+                        title: "GNC Trainer".into(),
                         resolution: (1280., 720.).into(),
+                        // You may want this set to `true` if you need virtual keyboard work in mobile browsers.
+                        prevent_default_event_handling: false,
+                        fit_canvas_to_parent: true,
                         ..default()
                     }),
                     ..default()
@@ -41,14 +44,6 @@ fn main() {
                     level: bevy::log::Level::DEBUG,
                     filter: "info,wgpu_core=warn,wgpu_hal=warn,bevy_persistent::persistent=warn"
                         .into(),
-                    ..default()
-                })
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        // You may want this set to `true` if you need virtual keyboard work in mobile browsers.
-                        prevent_default_event_handling: false,
-                        ..default()
-                    }),
                     ..default()
                 })
                 .set(AssetPlugin {

@@ -40,6 +40,15 @@ impl Default for EditorState {
     }
 }
 
+#[derive(Resource, Default)]
+pub struct AboutPopupState {
+    pub show: bool,
+}
+
+// Native-only imports
+#[cfg(not(target_arch = "wasm32"))]
+use rfd::FileDialog;
+
 pub fn ui_system(
     mut contexts: EguiContexts,
     mut editor_state: ResMut<EditorState>,
@@ -53,6 +62,7 @@ pub fn ui_system(
     mut state: ResMut<NextState<GameState>>,
     progress: ResMut<Persistent<LevelProgress>>,
     mut popup: ResMut<LevelCompletePopup>,
+    mut about_popup: ResMut<AboutPopupState>,
 ) {
     let new_level_number = None;
     let mut reset_requested = false;
@@ -74,6 +84,9 @@ pub fn ui_system(
                 }
                 popup.show = false;
                 state.set(GameState::LevelSelect);
+            }
+            if ui.button("About").clicked() {
+                about_popup.show = !about_popup.show;
             }
         });
     });
@@ -261,6 +274,17 @@ pub fn ui_system(
                 if ui.button("Reset Code").clicked() {
                     editor_state.show_reset_confirmation = true;
                 }
+
+                if ui.button("Export").clicked() {
+                    // Find current level number
+                    if let Some((level_num, _)) = level_manager
+                        .available_levels
+                        .iter()
+                        .find(|(_, name)| name == &current_level.config.name)
+                    {
+                        export_code(&editor_state.code, *level_num);
+                    }
+                }
             });
         });
 
@@ -390,6 +414,7 @@ pub fn level_select_ui(
     mut reset_flag: ResMut<ResetVisibilityFlag>,
     mut reset_vis: ResMut<ResetVisualization>,
     mut script_engine: ResMut<ScriptEngine>,
+    mut about_popup: ResMut<AboutPopupState>,
 ) {
     egui::CentralPanel::default().show(contexts.ctx_mut(), |ui| {
         ui.vertical_centered(|ui| {
@@ -443,13 +468,29 @@ pub fn level_select_ui(
                 }
             }
 
-            ui.add_space(20.0);
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                if ui.button("Exit").clicked() {
-                    std::process::exit(0);
+            ui.add_space(30.0);
+
+            ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    ui.horizontal(|ui| {
+                        if ui.button("Exit").clicked() {
+                            std::process::exit(0);
+                        }
+                        ui.add_space(20.0);
+                        if ui.button("About").clicked() {
+                            about_popup.show = !about_popup.show;
+                        }
+                    });
                 }
-            }
+
+                #[cfg(target_arch = "wasm32")]
+                {
+                    if ui.button("About").clicked() {
+                        about_popup.show = true;
+                    }
+                }
+            });
         });
     });
 }
@@ -487,6 +528,7 @@ pub fn level_complete_popup(
 pub(crate) fn handle_escape(
     keys: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<NextState<GameState>>,
+    mut about_popup: ResMut<AboutPopupState>,
     editor_state: Res<EditorState>,
     progress: ResMut<Persistent<LevelProgress>>,
     current_level: Res<CurrentLevel>,
@@ -494,15 +536,105 @@ pub(crate) fn handle_escape(
     mut popup: ResMut<LevelCompletePopup>,
 ) {
     if keys.just_pressed(KeyCode::Escape) {
-        // Save current editor state before switching
-        if let Some((level_num, _)) = level_manager
+        if about_popup.show {
+            about_popup.show = false;
+        } else if let Some((level_num, _)) = level_manager
             .available_levels
             .iter()
             .find(|(_, name)| name == &current_level.config.name)
         {
+            // Save current editor state before switching
             let _ = persistence::save_editor_state(*level_num, editor_state.code.clone(), progress);
         }
         popup.show = false;
         state.set(GameState::LevelSelect);
+    }
+}
+
+pub fn about_popup(
+    mut contexts: EguiContexts,
+    mut popup: ResMut<AboutPopupState>,
+    keys: Res<ButtonInput<KeyCode>>,
+) {
+    if popup.show {
+        egui::Window::new("About GNC Trainer")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(contexts.ctx_mut(), |ui| {
+                ui.vertical_centered(|ui| {
+                    // Make everything centered
+                    ui.add_space(16.0);
+                    ui.heading("GNC Trainer");
+                    ui.add_space(8.0);
+
+                    ui.label("A simple spacecraft landing simulator");
+                    ui.label("for learning GNC principles.");
+                    ui.add_space(8.0);
+
+                    ui.label("Thanks for playing!");
+                    ui.add_space(4.0);
+                    ui.label("\u{00A9} Thomas Antony. 2025");
+
+                    ui.add_space(8.0);
+                    ui.hyperlink_to(
+                        "Project Homepage",
+                        "https://www.thomasantony.com/gnc-trainer",
+                    );
+
+                    ui.add_space(16.0);
+                    if ui.button("Close").clicked() || keys.just_pressed(KeyCode::Escape) {
+                        popup.show = false;
+                    }
+                });
+            });
+    }
+}
+
+pub fn export_code(code: &str, level_num: usize) {
+    let filename = format!("level{}_solution.rhai", level_num);
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        use js_sys::Array;
+        use wasm_bindgen::JsCast;
+        use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url};
+
+        // Create a Blob containing the code
+        let properties = BlobPropertyBag::new();
+        properties.set_type("text/plain");
+        let blob_parts = Array::new();
+        blob_parts.push(&js_sys::JsString::from(code));
+        let blob = Blob::new_with_str_sequence_and_options(&blob_parts, &properties)
+            .expect("Failed to create blob");
+
+        // Create download URL
+        let url = Url::create_object_url_with_blob(&blob).expect("Failed to create object URL");
+
+        // Create and click a temporary download link
+        let document = web_sys::window()
+            .expect("Failed to get window")
+            .document()
+            .expect("Failed to get document");
+
+        let anchor = document
+            .create_element("a")
+            .expect("Failed to create anchor")
+            .dyn_into::<HtmlAnchorElement>()
+            .expect("Failed to convert to anchor");
+
+        anchor.set_href(&url);
+        anchor.set_download(&filename);
+        anchor.click();
+
+        // Clean up
+        Url::revoke_object_url(&url).expect("Failed to revoke object URL");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if let Some(path) = FileDialog::new().set_file_name(&filename).save_file() {
+            std::fs::write(path, code).expect("Failed to write file");
+        }
     }
 }

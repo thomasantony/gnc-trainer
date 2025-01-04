@@ -1,5 +1,5 @@
 use bevy::{asset::AssetMetaCheck, log::LogPlugin, prelude::*};
-use bevy_egui::EguiPlugin;
+use bevy_egui::{EguiContexts, EguiPlugin};
 
 mod constants;
 mod levels;
@@ -17,8 +17,8 @@ use persistence::{setup_persistence, LevelProgress};
 use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState};
 use ui::{
-    handle_escape, level_complete_popup, level_select_ui, ui_system, EditorState, GameState,
-    LevelCompletePopup, SimulationState,
+    about_popup, handle_escape, level_complete_popup, level_select_ui, ui_system, AboutPopupState,
+    EditorState, GameState, LevelCompletePopup, SimulationState,
 };
 use visualization::{
     reset_lander_visibility, spawn_visualization, update_grid_lines, update_visualization,
@@ -63,6 +63,7 @@ fn main() {
             0.05,
             TimerMode::Repeating,
         )))
+        .insert_resource(AboutPopupState::default())
         .init_state::<GameState>()
         .insert_resource(State::new(GameState::LevelSelect))
         .insert_resource(LevelCompletePopup::default())
@@ -75,6 +76,7 @@ fn main() {
             (
                 level_select_ui.run_if(in_state(GameState::LevelSelect)),
                 level_complete_popup,
+                about_popup,
                 (
                     ui_system,
                     simulation_system.run_if(run_simulation),

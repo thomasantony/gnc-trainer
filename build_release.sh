@@ -8,6 +8,9 @@ fi
 VERSION=$1
 trunk build --release
 
+FILENAME=$(ls ./dist/*.wasm | head -n1)
+wasm-opt -O -ol 100 -s 100 $FILENAME -o $FILENAME
+
 # Tar contents of dist/ but not the directory itself
 tar -czf "gnc-trainer-$VERSION.tar.gz" -C dist .
 

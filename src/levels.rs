@@ -1,7 +1,8 @@
-use bevy::asset::AssetLoader;
 use bevy::prelude::*;
 use bevy::utils::hashbrown::HashMap;
 use serde::Deserialize;
+
+use crate::assets::{RonAsset, RonAssetLoader};
 
 #[derive(Debug, Deserialize, Clone)]
 pub enum ControlScheme {
@@ -76,36 +77,6 @@ pub struct LevelList {
     pub levels: Vec<String>, // List of level file names without extension
 }
 
-// Asset loader for RON files
-#[derive(Asset, TypePath, Debug)]
-pub struct RonAsset(pub String);
-
-#[derive(Default)]
-pub struct RonAssetLoader;
-
-impl AssetLoader for RonAssetLoader {
-    type Asset = RonAsset;
-    type Settings = ();
-    type Error = std::io::Error;
-
-    fn load(
-        &self,
-        reader: &mut dyn bevy::asset::io::Reader,
-        _settings: &Self::Settings,
-        _load_context: &mut bevy::asset::LoadContext,
-    ) -> impl bevy::utils::ConditionalSendFuture<Output = Result<Self::Asset, Self::Error>> {
-        Box::pin(async move {
-            let mut bytes = Vec::new();
-            reader.read_to_end(&mut bytes).await?;
-            let content = String::from_utf8_lossy(&bytes).to_string();
-            Ok(RonAsset(content))
-        })
-    }
-
-    fn extensions(&self) -> &[&str] {
-        &["ron"]
-    }
-}
 #[derive(Default, Resource)]
 pub struct LevelManager {
     pub levels: HashMap<usize, LevelConfig>,

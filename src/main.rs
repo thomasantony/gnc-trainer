@@ -1,6 +1,7 @@
 use bevy::{asset::AssetMetaCheck, log::LogPlugin, prelude::*};
 use bevy_egui::EguiPlugin;
 
+mod assets;
 mod constants;
 mod levels;
 mod particles; // New module
@@ -17,8 +18,8 @@ use persistence::{setup_persistence, LevelProgress};
 use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState};
 use ui::{
-    about_popup, handle_escape, level_complete_popup, level_select_ui, ui_system, AboutPopupState,
-    EditorState, GameState, LevelCompletePopup, SimulationState,
+    about_popup, handle_escape, handle_script_loading, level_complete_popup, level_select_ui,
+    ui_system, AboutPopupState, EditorState, GameState, LevelCompletePopup, SimulationState,
 };
 use visualization::{
     reset_lander_visibility, spawn_visualization, update_grid_lines, update_visualization,
@@ -67,6 +68,8 @@ fn main() {
         .init_state::<GameState>()
         .insert_resource(State::new(GameState::LevelSelect))
         .insert_resource(LevelCompletePopup::default())
+        .init_asset::<assets::ScriptAsset>()
+        .init_asset_loader::<assets::ScriptAssetLoader>()
         .add_systems(
             OnEnter(GameLoadState::Ready),
             (setup, setup_persistence, spawn_visualization),
@@ -87,6 +90,7 @@ fn main() {
                     visualization::reset_visualization_system,
                     (level_completion_check, save_current_editor_state).chain(),
                     handle_escape,
+                    handle_script_loading,
                 )
                     .run_if(in_state(GameState::Playing)),
             )

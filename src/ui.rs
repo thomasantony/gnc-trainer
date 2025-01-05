@@ -3,6 +3,7 @@ use bevy_egui::{egui, EguiContexts};
 use bevy_persistent::prelude::*;
 use egui_extras::syntax_highlighting;
 
+use crate::assets::ScriptAsset;
 use crate::levels::{ControlScheme, CurrentLevel, LevelManager};
 use crate::persistence::{self, LevelProgress};
 use crate::rhai_api::{ControlType, ScriptEngine};
@@ -26,6 +27,7 @@ pub struct EditorState {
     pub console_height: f32,
     pub last_console_output: Vec<String>,
     pub show_reset_confirmation: bool,
+    pub default_script_handle: Handle<ScriptAsset>,
 }
 
 impl Default for EditorState {
@@ -36,6 +38,7 @@ impl Default for EditorState {
             console_height: 150.0,
             last_console_output: Vec::new(),
             show_reset_confirmation: false,
+            default_script_handle: Handle::default(),
         }
     }
 }
@@ -63,6 +66,8 @@ pub fn ui_system(
     progress: ResMut<Persistent<LevelProgress>>,
     mut popup: ResMut<LevelCompletePopup>,
     mut about_popup: ResMut<AboutPopupState>,
+    asset_server: Res<AssetServer>,
+    script_assets: Res<Assets<ScriptAsset>>,
 ) {
     let new_level_number = None;
     let mut reset_requested = false;
@@ -76,6 +81,10 @@ pub fn ui_system(
                     .iter()
                     .find(|(_, name)| name == &current_level.config.name)
                 {
+                    let script_handle =
+                        asset_server.load(format!("scripts/level{}_default.rhai", level_num));
+                    editor_state.default_script_handle = script_handle;
+
                     let _ = persistence::save_editor_state(
                         *level_num,
                         editor_state.code.clone(),
@@ -92,6 +101,7 @@ pub fn ui_system(
     });
 
     // Handle level selection
+
     if let Some(level_num) = new_level_number {
         if let Some(new_config) = level_manager.get_level(level_num) {
             editor_state.simulation_state = SimulationState::Stopped;
@@ -336,7 +346,7 @@ pub fn ui_system(
             });
         });
 
-    // Add the confirmation dialog
+    // Add the confirmation dialog for "Reset Code"
     if editor_state.show_reset_confirmation {
         egui::Window::new("Confirm Reset")
             .collapsible(false)
@@ -346,18 +356,10 @@ pub fn ui_system(
                 ui.label("Are you sure you want to reset the code to the default script?");
                 ui.horizontal(|ui| {
                     if ui.button("Yes").clicked() {
-                        // Load default script for current level
-                        if let Some((level_num, _)) = level_manager
-                            .available_levels
-                            .iter()
-                            .find(|(_, name)| name == &current_level.config.name)
+                        if let Some(script_asset) =
+                            script_assets.get(&editor_state.default_script_handle)
                         {
-                            if let Ok(script) = std::fs::read_to_string(format!(
-                                "assets/scripts/level{}_default.rhai",
-                                level_num
-                            )) {
-                                editor_state.code = script;
-                            }
+                            editor_state.code = script_asset.0.clone();
                         }
                         editor_state.show_reset_confirmation = false;
                     }
@@ -415,6 +417,8 @@ pub fn level_select_ui(
     mut reset_vis: ResMut<ResetVisualization>,
     mut script_engine: ResMut<ScriptEngine>,
     mut about_popup: ResMut<AboutPopupState>,
+    asset_server: Res<AssetServer>,
+    script_assets: Res<Assets<ScriptAsset>>,
 ) {
     egui::CentralPanel::default().show(contexts.ctx_mut(), |ui| {
         ui.vertical_centered(|ui| {
@@ -449,15 +453,18 @@ pub fn level_select_ui(
                             }
                         }
 
-                        // Load saved code or default
+                        // Load default script for this level
+                        let default_script_handle =
+                            asset_server.load(format!("scripts/level{}_default.rhai", number));
+                        editor_state.default_script_handle = default_script_handle.clone();
+
+                        // Try to get saved code or use default
                         if let Some(saved_code) = persistence::get_editor_state(*number, &progress)
                         {
                             editor_state.code = saved_code;
-                        } else if let Ok(script) = std::fs::read_to_string(format!(
-                            "assets/scripts/level{}_default.rhai",
-                            number
-                        )) {
-                            editor_state.code = script;
+                        } else if let Some(script_asset) = script_assets.get(&default_script_handle)
+                        {
+                            editor_state.code = script_asset.0.clone();
                         }
 
                         reset_simulation(&mut lander_state, &current_level, &mut camera_state);
@@ -631,6 +638,35 @@ pub fn export_code(code: &str, level_num: usize) {
     {
         if let Some(path) = FileDialog::new().set_file_name(&filename).save_file() {
             std::fs::write(path, code).expect("Failed to write file");
+        }
+    }
+}
+
+pub fn handle_script_loading(
+    mut editor_state: ResMut<EditorState>,
+    script_assets: Res<Assets<ScriptAsset>>,
+    progress: Res<Persistent<LevelProgress>>,
+    level_manager: Res<LevelManager>,
+    current_level: Res<CurrentLevel>,
+) {
+    // Only try to load if we have an empty code buffer
+    if editor_state.code.is_empty() {
+        // Get current level number
+        if let Some((level_num, _)) = level_manager
+            .available_levels
+            .iter()
+            .find(|(_, name)| name == &current_level.config.name)
+        {
+            // First try to get the saved code
+            if let Some(saved_code) = persistence::get_editor_state(*level_num, &progress) {
+                editor_state.code = saved_code;
+            }
+            // If no saved code and the asset is loaded, use the default
+            else if let Some(script_asset) =
+                script_assets.get(&editor_state.default_script_handle)
+            {
+                editor_state.code = script_asset.0.clone();
+            }
         }
     }
 }

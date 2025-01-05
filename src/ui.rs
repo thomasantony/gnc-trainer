@@ -142,7 +142,7 @@ pub fn ui_system(
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 ui.label("The code below is written in");
-                ui.hyperlink_to("Rhai script", "https://www.rhai.rs");
+                ui.hyperlink_to("Rhai script", "https://rhai.rs");
             });
 
             ui.add_space(4.0);

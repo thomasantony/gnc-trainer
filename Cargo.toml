@@ -28,6 +28,7 @@ web-sys = { version = "0.3", features = [
     "Document",
     "Window",
     "Element",
+    "Navigator",
 ] }
 
 # Enable a small amount of optimization in the dev profile.

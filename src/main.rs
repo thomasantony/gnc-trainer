@@ -26,6 +26,33 @@ use visualization::{
     CameraState, MainCamera, ResetVisibilityFlag,
 };
 
+#[cfg(target_arch = "wasm32")]
+fn is_mobile() -> bool {
+    let window = web_sys::window().expect("should have window");
+    let navigator = window.navigator();
+    let user_agent = navigator.user_agent().expect("should have user agent");
+
+    // Common mobile platform keywords
+    let mobile_keywords = [
+        "Android",
+        "iPhone",
+        "iPad",
+        "iPod",
+        "webOS",
+        "BlackBerry",
+        "Windows Phone",
+    ];
+
+    mobile_keywords
+        .iter()
+        .any(|&keyword| user_agent.contains(keyword))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn is_mobile() -> bool {
+    false
+}
+
 fn main() {
     App::new()
         .add_plugins(
@@ -34,8 +61,9 @@ fn main() {
                     primary_window: Some(Window {
                         title: "GNC Trainer".into(),
                         resolution: (1280., 720.).into(),
-                        // You may want this set to `true` if you need virtual keyboard work in mobile browsers.
-                        prevent_default_event_handling: false,
+                        // Enable default event handling on mobile for virtual keyboard
+                        // Disable on desktop for copy-paste shortcuts
+                        prevent_default_event_handling: is_mobile(),
                         fit_canvas_to_parent: true,
                         ..default()
                     }),

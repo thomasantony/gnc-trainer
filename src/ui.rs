@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_egui::egui::Hyperlink;
 use bevy_egui::{egui, EguiContexts};
 use bevy_persistent::prelude::*;
 use egui_extras::syntax_highlighting;
@@ -141,8 +142,10 @@ pub fn ui_system(
             ui.label(&current_level.config.description);
             ui.add_space(8.0);
             ui.horizontal(|ui| {
+                let rhai_link = Hyperlink::from_label_and_url("Rhai script", "https://rhai.rs")
+                    .open_in_new_tab(true);
                 ui.label("The code below is written in");
-                ui.hyperlink_to("Rhai script", "https://rhai.rs");
+                ui.add(rhai_link);
             });
 
             ui.add_space(4.0);

@@ -144,7 +144,8 @@ pub fn ui_system(
             ui.horizontal(|ui| {
                 let rhai_link = Hyperlink::from_label_and_url("Rhai script", "https://rhai.rs")
                     .open_in_new_tab(true);
-                ui.label("The code below is written in");
+                ui.label("Write your script below to control the spacecraft.");
+                ui.label("The script should be written in");
                 ui.add(rhai_link);
             });
 

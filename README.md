@@ -27,8 +27,8 @@ A spacecraft landing simulator for learning Guidance and Control systems. Built 
 # Run locally
 cargo run --release
 
-# Build for web
-cargo build --release --target wasm32-unknown-unknown
+# Build for web (using trunk - https://trunkrs.dev)
+trunk serve --release
 ```
 
 ## Writing Control Scripts

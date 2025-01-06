@@ -586,10 +586,20 @@ pub fn about_popup(
                     ui.label("\u{00A9} Thomas Antony. 2025");
 
                     ui.add_space(8.0);
-                    ui.hyperlink_to(
+                    let website_link = egui::widgets::Hyperlink::from_label_and_url(
                         "Project Homepage",
                         "https://www.thomasantony.com/gnc-trainer",
-                    );
+                    )
+                    .open_in_new_tab(true);
+                    ui.add(website_link);
+                    ui.add_space(2.0);
+
+                    let github_link = egui::widgets::Hyperlink::from_label_and_url(
+                        "Source Code",
+                        "https://www.github.com/thomasantony/gnc-trainer",
+                    )
+                    .open_in_new_tab(true);
+                    ui.add(github_link);
 
                     ui.add_space(16.0);
                     if ui.button("Close").clicked() || keys.just_pressed(KeyCode::Escape) {

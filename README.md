@@ -56,7 +56,7 @@ return [0.5, 0.1] // Thrust vectoring: [thrust, gimbal_angle]
 ## Dependencies
 
 - Bevy 0.15
-- egui + egui_code_editor for UI
+- egui for UI
 - [RHAI](https://rhai.rs) for scripting
 - bevy_persistent for save data
 

@@ -36,4 +36,5 @@
     control_scheme: ThrustVector,
     success_message: "Landed successfully!",
     failure_message: "Landing too hard! The lander crashed.",
+    hint: "1. You need to do a \"gravity turn\". \n2. First perfect an attitude controller that uses constant thrust and a controlled gimbal angle that is able to to target any orientation.\n3. Then use controller to point the thrust opposite the velocity vector (atan(vx, -vy).\n4. Set target descent rate based on altitude and use a controller to modulate thrust like the previous levels. Good luck!"
 )

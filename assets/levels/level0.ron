@@ -42,4 +42,5 @@
     control_scheme: VerticalOnly,
     success_message: "Great job! You maintained a stable hover.",
     failure_message: "Mission failed! The spacecraft moved outside the permitted zone.",
+    hint: "Use a proportional controller on vy as shown in the example code, targeting zero velocity"
 )

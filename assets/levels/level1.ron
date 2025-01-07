@@ -36,4 +36,5 @@
     control_scheme: VerticalOnly,
     success_message: "Landed successfully!",
     failure_message: "Landing too hard! The lander crashed.",
+    hint: "Use a proportional controller like in level 0, but now with a varying target velocity. Faster at the beginning, and slower once you are closer to the ground." 
 )

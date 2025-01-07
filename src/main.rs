@@ -18,8 +18,9 @@ use persistence::{setup_persistence, LevelProgress};
 use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState};
 use ui::{
-    about_popup, handle_escape, handle_script_loading, level_complete_popup, level_select_ui,
-    ui_system, AboutPopupState, EditorState, GameState, LevelCompletePopup, SimulationState,
+    about_popup, handle_escape, handle_script_loading, hint_popup, level_complete_popup,
+    level_select_ui, ui_system, AboutPopupState, EditorState, GameState, HintPopupState,
+    LevelCompletePopup, SimulationState,
 };
 use visualization::{
     reset_lander_visibility, spawn_visualization, update_grid_lines, update_visualization,
@@ -93,6 +94,7 @@ fn main() {
             TimerMode::Repeating,
         )))
         .insert_resource(AboutPopupState::default())
+        .insert_resource(HintPopupState::default())
         .init_state::<GameState>()
         .insert_resource(State::new(GameState::LevelSelect))
         .insert_resource(LevelCompletePopup::default())
@@ -119,6 +121,7 @@ fn main() {
                     (level_completion_check, save_current_editor_state).chain(),
                     handle_escape,
                     handle_script_loading,
+                    hint_popup,
                 )
                     .run_if(in_state(GameState::Playing)),
             )

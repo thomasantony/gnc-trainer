@@ -49,6 +49,11 @@ pub struct AboutPopupState {
     pub show: bool,
 }
 
+#[derive(Resource, Default)]
+pub struct HintPopupState {
+    pub show: bool,
+}
+
 // Native-only imports
 #[cfg(not(target_arch = "wasm32"))]
 use rfd::FileDialog;
@@ -67,6 +72,7 @@ pub fn ui_system(
     progress: ResMut<Persistent<LevelProgress>>,
     mut popup: ResMut<LevelCompletePopup>,
     mut about_popup: ResMut<AboutPopupState>,
+    mut hint_popup: ResMut<HintPopupState>,
     asset_server: Res<AssetServer>,
     script_assets: Res<Assets<ScriptAsset>>,
 ) {
@@ -293,6 +299,11 @@ pub fn ui_system(
 
                 if ui.button("Reset Code").clicked() {
                     editor_state.show_reset_confirmation = true;
+                }
+
+                if ui.button("Hint").clicked() {
+                    about_popup.show = false; // Hide other popups
+                    hint_popup.show = true;
                 }
 
                 if ui.button("Export").clicked() {
@@ -688,5 +699,29 @@ pub fn handle_script_loading(
                 editor_state.code = script_asset.0.clone();
             }
         }
+    }
+}
+
+pub fn hint_popup(
+    mut contexts: EguiContexts,
+    mut popup: ResMut<HintPopupState>,
+    level: Res<CurrentLevel>,
+    keys: Res<ButtonInput<KeyCode>>,
+) {
+    if popup.show {
+        egui::Window::new("Level Hint")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(contexts.ctx_mut(), |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(16.0);
+                    ui.label(&level.config.hint);
+                    ui.add_space(16.0);
+                    if ui.button("Close").clicked() || keys.just_pressed(KeyCode::Escape) {
+                        popup.show = false;
+                    }
+                });
+            });
     }
 }

@@ -63,6 +63,7 @@ pub struct FailureCriteria {
 pub struct LevelConfig {
     pub name: String,
     pub description: String,
+    pub hint: String, // Add this line
     pub physics: Physics,
     pub initial: InitialState,
     pub success: SuccessCriteria,

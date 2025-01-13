@@ -4,7 +4,6 @@ use bevy_egui::EguiPlugin;
 mod assets;
 mod constants;
 mod levels;
-mod particles; // New module
 mod persistence;
 mod rhai_api;
 mod simulation;
@@ -13,7 +12,6 @@ mod visualization;
 
 use bevy_persistent::Persistent;
 use levels::{CurrentLevel, GameLoadState, LevelManager, LevelPlugin};
-use particles::{particle_system, ParticleSpawnTimer};
 use persistence::{setup_persistence, LevelProgress};
 use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState};
@@ -23,8 +21,7 @@ use ui::{
     LevelCompletePopup, SimulationState,
 };
 use visualization::{
-    reset_lander_visibility, spawn_visualization, update_grid_lines, update_visualization,
-    CameraState, MainCamera, ResetVisibilityFlag,
+    spawn_visualization, CameraState, MainCamera, ResetVisibilityFlag, VisualizationPlugin,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -89,10 +86,6 @@ fn main() {
         .insert_resource(visualization::CameraState::default())
         .insert_resource(ResetVisibilityFlag::default())
         .insert_resource(visualization::ResetVisualization::default())
-        .insert_resource(ParticleSpawnTimer(Timer::from_seconds(
-            0.05,
-            TimerMode::Repeating,
-        )))
         .insert_resource(AboutPopupState::default())
         .insert_resource(HintPopupState::default())
         .init_state::<GameState>()
@@ -104,6 +97,7 @@ fn main() {
             OnEnter(GameLoadState::Ready),
             (setup, setup_persistence, spawn_visualization),
         )
+        .add_plugins(VisualizationPlugin)
         .add_systems(
             Update,
             (
@@ -113,11 +107,6 @@ fn main() {
                 (
                     ui_system,
                     simulation_system.run_if(run_simulation),
-                    update_visualization,
-                    update_grid_lines,
-                    particle_system,
-                    reset_lander_visibility,
-                    visualization::reset_visualization_system,
                     (level_completion_check, save_current_editor_state).chain(),
                     handle_escape,
                     handle_script_loading,

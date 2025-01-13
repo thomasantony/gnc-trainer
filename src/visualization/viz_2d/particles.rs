@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 use rand::Rng;
 
+use super::components::LevelSpecific;
 use crate::simulation::LanderState;
-use crate::visualization::{world_to_screen, CameraState, LevelSpecific};
+use crate::visualization::common::{world_to_screen, CameraState};
 
 // Constants for particle system
 const PARTICLE_LIFETIME: f32 = 0.5;
@@ -28,6 +29,12 @@ pub struct ExhaustParticle {
 
 #[derive(Resource)]
 pub struct ParticleSpawnTimer(pub Timer);
+
+impl FromWorld for ParticleSpawnTimer {
+    fn from_world(_world: &mut World) -> Self {
+        Self(Timer::from_seconds(0.05, TimerMode::Repeating))
+    }
+}
 
 fn spawn_particle(
     commands: &mut Commands,
@@ -109,7 +116,10 @@ pub fn particle_system(
     mut timer: ResMut<ParticleSpawnTimer>,
     mut camera_state: ResMut<CameraState>,
     mut query_set: ParamSet<(
-        Query<(Entity, &Transform, &mut Visibility), With<crate::visualization::Lander>>,
+        Query<
+            (Entity, &Transform, &mut Visibility),
+            With<crate::visualization::viz_2d::components::Lander>,
+        >,
         Query<(Entity, &mut Transform, &mut ExhaustParticle)>,
     )>,
     lander_state: Res<LanderState>,

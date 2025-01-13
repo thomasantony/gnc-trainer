@@ -1,51 +1,15 @@
-use crate::constants::{LANDER_HEIGHT, LANDER_WIDTH};
-use crate::levels::{CurrentLevel, Reference};
-use crate::simulation::LanderState;
+// Copy the entire systems code from the original visualization.rs here
+// Just update the imports to use the new module structure:
+
 use bevy::asset::RenderAssetUsages;
 use bevy::color::palettes::css::*;
 use bevy::prelude::*;
 
-// Constants for view configuration
-pub(crate) const WORLD_TO_SCREEN_SCALE: f32 = 10.0;
-const RIGHT_PANEL_WIDTH: f32 = 600.0;
-const GROUND_OFFSET: f32 = -200.0; // Pixels from center of screen to ground
-const MIN_VIEW_HEIGHT: f32 = 30.0; // Minimum world height (in meters) visible in the view
-
-#[derive(Component)]
-pub struct MainCamera;
-
-#[derive(Resource)]
-pub struct CameraState {
-    pub following: bool,
-    pub target_offset: Vec2,
-    pub explosion_spawned: bool,
-}
-
-impl Default for CameraState {
-    fn default() -> Self {
-        Self {
-            following: true,
-            target_offset: Vec2::ZERO,
-            explosion_spawned: false,
-        }
-    }
-}
-
-// Components
-#[derive(Component)]
-pub struct Lander;
-
-#[derive(Component)]
-pub struct Ground;
-
-#[derive(Component)]
-pub struct TargetZone;
-
-#[derive(Component)]
-pub struct GridSystem;
-
-#[derive(Resource, Default)]
-pub struct ResetVisibilityFlag(pub bool);
+use super::components::*;
+use crate::constants::{LANDER_HEIGHT, LANDER_WIDTH};
+use crate::levels::{CurrentLevel, Reference};
+use crate::simulation::LanderState;
+use crate::visualization::common::*;
 
 const GRID_SPACING: f32 = 10.0; // 10 meter spacing
 

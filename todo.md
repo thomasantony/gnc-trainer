@@ -22,3 +22,8 @@
 [x] Add trunk.rs support
 [ ] Add github action to trigger deploy on website repo
 [ ] Update website repo to checkout, build, deploy the game
+[ ] MVP for 3D visualization
+[ ] MVP for 6dof dynamics
+[ ] MVP for Monaco editor support on web
+[ ] Monaco support in native app (tauri?)
+    - https://github.com/jinleili/bevy-in-web-worker ?

@@ -25,5 +25,8 @@
 [ ] MVP for 3D visualization
 [ ] MVP for 6dof dynamics
 [ ] MVP for Monaco editor support on web
+    [ ] Use yew for UI in general
+    [ ] Move console to HTML as well
+    [ ] HTML buttons
 [ ] Monaco support in native app (tauri?)
     - https://github.com/jinleili/bevy-in-web-worker ?

@@ -8,14 +8,16 @@ mod persistence;
 mod rhai_api;
 mod simulation;
 mod ui;
+mod ui_old;
 mod visualization;
+// use ui_old::UiPlugin;
 
 use bevy_persistent::Persistent;
 use levels::{CurrentLevel, GameLoadState, LevelManager, LevelPlugin};
 use persistence::{setup_persistence, LevelProgress};
 use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState};
-use ui::{
+use ui_old::{
     about_popup, handle_escape, handle_script_loading, hint_popup, level_complete_popup,
     level_select_ui, ui_system, AboutPopupState, EditorState, GameState, HintPopupState,
     LevelCompletePopup, SimulationState,
@@ -50,6 +52,58 @@ fn is_mobile() -> bool {
 fn is_mobile() -> bool {
     false
 }
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    // Initialize Yew
+
+    use ui::UiPlugin;
+    ui::start_ui();
+
+    // Start Bevy app
+    App::new()
+        .add_plugins(DefaultPlugins)
+        .add_plugins(UiPlugin)
+        .add_plugins(LevelPlugin)
+        .insert_resource(EditorState::default())
+        .insert_resource(LanderState::default())
+        .insert_resource(ScriptEngine::default())
+        .insert_resource(visualization::CameraState::default())
+        .insert_resource(ResetVisibilityFlag::default())
+        .insert_resource(visualization::ResetVisualization::default())
+        .insert_resource(AboutPopupState::default())
+        .insert_resource(HintPopupState::default())
+        .init_state::<GameState>()
+        .insert_resource(State::new(GameState::LevelSelect))
+        .insert_resource(LevelCompletePopup::default())
+        .init_asset::<assets::ScriptAsset>()
+        .init_asset_loader::<assets::ScriptAssetLoader>()
+        .add_systems(
+            OnEnter(GameLoadState::Ready),
+            (setup, setup_persistence, spawn_visualization),
+        )
+        .add_plugins(VisualizationPlugin)
+        .add_systems(
+            Update,
+            (
+                level_select_ui.run_if(in_state(GameState::LevelSelect)),
+                level_complete_popup,
+                about_popup,
+                (
+                    ui_system,
+                    simulation_system.run_if(run_simulation),
+                    (level_completion_check, save_current_editor_state).chain(),
+                    handle_escape,
+                    handle_script_loading,
+                    hint_popup,
+                )
+                    .run_if(in_state(GameState::Playing)),
+            )
+                .run_if(in_state(GameLoadState::Ready)),
+        )
+        .run();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 
 fn main() {
     App::new()

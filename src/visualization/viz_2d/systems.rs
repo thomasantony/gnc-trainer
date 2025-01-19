@@ -372,3 +372,21 @@ pub fn reset_lander_visibility(
         reset_flag.0 = false; // This is correct - we want to reset it after handling
     }
 }
+
+pub fn cleanup_2d_visualization(
+    mut commands: Commands,
+    query: Query<
+        Entity,
+        Or<(
+            With<Ground>,
+            With<Lander>,
+            With<TargetZone>,
+            With<GridSystem>,
+            With<LevelSpecific>,
+        )>,
+    >,
+) {
+    for entity in query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+}

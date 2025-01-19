@@ -405,9 +405,10 @@ pub fn ui_system(
 
 #[derive(States, Default, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum GameState {
-    #[default]
     LevelSelect,
     Playing,
+    #[default]
+    ThreeDViz, // New state for 3D visualization
 }
 
 #[derive(Resource)]

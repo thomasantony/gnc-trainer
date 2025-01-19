@@ -10,6 +10,7 @@ mod simulation;
 mod ui;
 mod visualization;
 
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_persistent::Persistent;
 use levels::{CurrentLevel, GameLoadState, LevelManager, LevelPlugin};
 use persistence::{setup_persistence, LevelProgress};
@@ -21,8 +22,12 @@ use ui::{
     LevelCompletePopup, SimulationState,
 };
 use visualization::{
-    spawn_visualization, CameraState, MainCamera, ResetVisibilityFlag, VisualizationPlugin,
+    spawn_visualization,
+    viz_3d::{CelBody, CelestialBodyType},
+    CameraState, MainCamera, ResetVisibilityFlag, Visualization3dPlugin, VisualizationPlugin,
 };
+
+pub type GridCellType = i64;
 
 #[cfg(target_arch = "wasm32")]
 fn is_mobile() -> bool {
@@ -80,6 +85,7 @@ fn main() {
         )
         .add_plugins(EguiPlugin)
         .add_plugins(LevelPlugin)
+        // .add_plugins(WorldInspectorPlugin::new())
         .insert_resource(EditorState::default())
         .insert_resource(LanderState::default())
         .insert_resource(ScriptEngine::default())
@@ -89,7 +95,7 @@ fn main() {
         .insert_resource(AboutPopupState::default())
         .insert_resource(HintPopupState::default())
         .init_state::<GameState>()
-        .insert_resource(State::new(GameState::LevelSelect))
+        .insert_resource(State::new(GameState::ThreeDViz))
         .insert_resource(LevelCompletePopup::default())
         .init_asset::<assets::ScriptAsset>()
         .init_asset_loader::<assets::ScriptAssetLoader>()
@@ -98,6 +104,7 @@ fn main() {
             (setup, setup_persistence, spawn_visualization),
         )
         .add_plugins(VisualizationPlugin)
+        .add_plugins(Visualization3dPlugin)
         .add_systems(
             Update,
             (
@@ -124,9 +131,18 @@ fn setup(
     mut lander_state: ResMut<LanderState>,
     current_level: Res<CurrentLevel>,
     mut camera_state: ResMut<CameraState>,
+    game_state: Res<State<GameState>>,
 ) {
-    commands.spawn((Camera2d, MainCamera));
-    reset_simulation(&mut lander_state, &current_level, &mut camera_state);
+    match game_state.get() {
+        GameState::Playing => {
+            commands.spawn((Camera2d, MainCamera));
+            reset_simulation(&mut lander_state, &current_level, &mut camera_state);
+        }
+        GameState::ThreeDViz => {
+            // 3D setup is handled by setup_3d_scene
+        }
+        _ => {}
+    }
 }
 
 fn run_simulation(state: Res<EditorState>, lander_state: Res<LanderState>) -> bool {

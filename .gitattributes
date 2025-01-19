@@ -1,0 +1,16 @@
+assets/textures/earth filter=lfs diff=lfs merge=lfs -text
+assets/textures/moon filter=lfs diff=lfs merge=lfs -text
+assets/Surveyor/Surveyor-Lander.bin filter=lfs diff=lfs merge=lfs -text
+assets/Surveyor/Surveyor-Lander.gltf filter=lfs diff=lfs merge=lfs -text
+assets/Surveyor/atl-hull5.png filter=lfs diff=lfs merge=lfs -text
+assets/Surveyor/copperfoil.png filter=lfs diff=lfs merge=lfs -text
+assets/Surveyor/metal.png filter=lfs diff=lfs merge=lfs -text
+assets/Surveyor/solarpnl.png filter=lfs diff=lfs merge=lfs -text
+assets/textures/earth/base_color.jpg filter=lfs diff=lfs merge=lfs -text
+assets/textures/earth/elevation_surface.jpg filter=lfs diff=lfs merge=lfs -text
+assets/textures/earth/emissive.jpg filter=lfs diff=lfs merge=lfs -text
+assets/textures/earth/metallic_roughness.png filter=lfs diff=lfs merge=lfs -text
+assets/textures/earth/normal_map.jpg filter=lfs diff=lfs merge=lfs -text
+assets/textures/moon/base_color.jpg filter=lfs diff=lfs merge=lfs -text
+assets/textures/moon/elevation_surface.jpg filter=lfs diff=lfs merge=lfs -text
+assets/textures/moon/normal_map.jpg filter=lfs diff=lfs merge=lfs -text

@@ -1,14 +1,17 @@
 mod common;
 mod viz_2d;
+pub mod viz_3d;
 
 pub use common::*;
+use viz_2d::systems::cleanup_2d_visualization;
 
-use crate::levels::CurrentLevel;
+use crate::{levels::CurrentLevel, ui::GameState};
 use bevy::prelude::*;
 
 // Re-export the main types that other modules need
 pub use common::{CameraState, ResetVisualization};
 pub use viz_2d::components::{MainCamera, ResetVisibilityFlag};
+pub use viz_3d::Visualization3dPlugin;
 
 #[derive(Component)]
 #[allow(dead_code)]
@@ -31,8 +34,10 @@ impl Plugin for VisualizationPlugin {
                     viz_2d::systems::reset_lander_visibility,
                     viz_2d::systems::reset_visualization_system,
                     viz_2d::particles::particle_system,
-                ),
+                )
+                    .run_if(in_state(GameState::Playing)),
             );
+        app.add_systems(OnExit(GameState::Playing), cleanup_2d_visualization);
     }
 }
 

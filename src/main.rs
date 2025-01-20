@@ -95,7 +95,7 @@ fn main() {
         .insert_resource(AboutPopupState::default())
         .insert_resource(HintPopupState::default())
         .init_state::<GameState>()
-        .insert_resource(State::new(GameState::ThreeDViz))
+        .insert_resource(State::new(GameState::LevelSelect))
         .insert_resource(LevelCompletePopup::default())
         .init_asset::<assets::ScriptAsset>()
         .init_asset_loader::<assets::ScriptAssetLoader>()

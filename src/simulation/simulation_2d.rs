@@ -7,6 +7,8 @@ use crate::{
     visualization::CameraState,
 };
 
+use super::{calculate_mass_flow, check_failure_conditions, check_success_conditions, LanderState};
+
 // Control limits
 const MAX_GIMBAL_ANGLE: f32 = 0.4; // radians (~23 degrees)
 const MIN_GIMBAL_ANGLE: f32 = -0.4; // radians
@@ -15,107 +17,15 @@ const MIN_THRUST: f32 = 0.0;
 const MAX_THRUST_CHANGE_RATE: f32 = 2.0; // Maximum thrust change per second
 const MAX_GIMBAL_RATE: f32 = 1.0; // Maximum gimbal angle change per second
 
-#[derive(Resource, Default)]
-pub struct LanderState {
-    pub position: Vec2,    // (x, y) position in meters
-    pub velocity: Vec2,    // (vx, vy) velocity in m/s
-    pub rotation: f32,     // rotation in radians
-    pub angular_vel: f32,  // angular velocity in rad/s
-    pub fuel: f32,         // kg
-    pub thrust_level: f32, // 0.0 to 1.0
-    pub gimbal_angle: f32, // radians
-    pub crashed: bool,
-    pub landed: bool,
-    pub success_timer: f32, // Time spent meeting success criteria
-    pub stabilizing: bool,  // True when meeting conditions but not yet complete
-}
-
 // Constants for rotational dynamics
 const MOMENT_OF_INERTIA: f32 = 100.0; // kg·m²
 const ANGULAR_DAMPING: f32 = 0.0; // artificial damping coefficient
 
-fn check_success_conditions(state: &LanderState, level: &CurrentLevel) -> bool {
-    let config = &level.config;
-
-    // Check velocity constraints
-    let speed_ok = state.velocity.x.abs() <= config.success.vx_max
-        && state.velocity.y.abs() <= config.success.vy_max;
-
-    // Check angle constraints
-    let angle_ok =
-        (state.rotation - config.success.final_angle).abs() <= config.success.angle_tolerance;
-
-    // Check position constraints
-    let position_ok = match config.success.position_box.reference {
-        Reference::Initial => {
-            // For initial-reference boxes (like hover), always check position
-            let initial_pos = Vec2::new(config.initial.x0, config.initial.y0);
-            let rel_pos = state.position - initial_pos;
-            rel_pos.x >= config.success.position_box.x_min
-                && rel_pos.x <= config.success.position_box.x_max
-                && rel_pos.y >= config.success.position_box.y_min
-                && rel_pos.y <= config.success.position_box.y_max
-        }
-        Reference::Absolute => {
-            if state.position.y <= LANDER_BASE_OFFSET + 0.1 {
-                // Only check absolute position constraints when on/near ground
-                state.position.x >= config.success.position_box.x_min
-                    && state.position.x <= config.success.position_box.x_max
-                    && state.position.y >= config.success.position_box.y_min
-                    && state.position.y <= config.success.position_box.y_max
-            } else {
-                // When in air, only check speed and angle
-                false
-            }
-        }
-    };
-
-    speed_ok && position_ok && angle_ok
-}
-
-fn check_failure_conditions(state: &LanderState, level: &CurrentLevel) -> bool {
-    let config = &level.config;
-
-    // Check ground collision based on the flag
-    if state.position.y <= LANDER_BASE_OFFSET {
-        if config.failure.ground_collision {
-            // If ground_collision flag is true, any contact is failure
-            return true;
-        } else {
-            // Otherwise, check if landing was too hard
-            let hard_landing = state.velocity.x.abs() > config.success.vx_max * 1.5
-                || state.velocity.y.abs() > config.success.vy_max * 1.5;
-            if hard_landing {
-                return true;
-            }
-        }
-    }
-
-    // Check out-of-bounds if defined
-    if let Some(bounds) = &config.failure.bounds {
-        let reference_pos = match bounds.reference {
-            Reference::Absolute => Vec2::ZERO,
-            Reference::Initial => Vec2::new(config.initial.x0, config.initial.y0),
-        };
-
-        let rel_pos = state.position - reference_pos;
-        if rel_pos.x < bounds.x_min
-            || rel_pos.x > bounds.x_max
-            || rel_pos.y < bounds.y_min
-            || rel_pos.y > bounds.y_max
-        {
-            return true;
-        }
-    }
-
-    false
-}
-
-pub fn simulation_system(
-    time: Res<Time>,
-    mut state: ResMut<LanderState>,
-    level: Res<CurrentLevel>,
-    mut script_engine: ResMut<ScriptEngine>,
+pub fn update_2d(
+    time: &Res<Time>,
+    state: &mut ResMut<LanderState>,
+    level: &Res<CurrentLevel>,
+    script_engine: &mut ResMut<ScriptEngine>,
 ) {
     // Only run simulation if we have a level config
     if !state.landed && !state.crashed {
@@ -127,8 +37,8 @@ pub fn simulation_system(
             y: state.position.y,
             vx: state.velocity.x,
             vy: state.velocity.y,
-            rotation: state.rotation,
-            angular_vel: state.angular_vel,
+            rotation: state.rotation.to_euler(EulerRot::XYZ).2,
+            angular_vel: state.angular_vel.z,
             fuel: state.fuel,
         };
 
@@ -190,15 +100,16 @@ pub fn simulation_system(
         // When rotation is 0 (pointing up):
         //   - thrust should be upward
         //   - gimbal rotates this direction
-        let thrust_direction = -state.rotation - state.gimbal_angle;
+        let thrust_direction = -state.rotation.to_euler(EulerRot::XYZ).2 - state.gimbal_angle;
 
-        let thrust_force = Vec2::new(
+        let thrust_force = Vec3::new(
             thrust_direction.sin() * state.thrust_level * config.physics.max_thrust,
             thrust_direction.cos() * state.thrust_level * config.physics.max_thrust,
+            0.0,
         );
 
         // Calculate gravity force (y-axis only)
-        let gravity_force = Vec2::new(0.0, config.physics.gravity * total_mass);
+        let gravity_force = Vec3::new(0.0, config.physics.gravity * total_mass, 0.0);
 
         // Sum forces and calculate linear acceleration
         let total_force = thrust_force + gravity_force;
@@ -215,14 +126,16 @@ pub fn simulation_system(
         };
 
         // Add artificial angular damping
-        let damping_torque = -state.angular_vel * ANGULAR_DAMPING;
+        let damping_torque = -state.angular_vel.z * ANGULAR_DAMPING;
         let total_torque = thrust_torque + damping_torque;
 
         // Update angular velocity and rotation
         let angular_acc = total_torque / MOMENT_OF_INERTIA;
-        state.angular_vel += angular_acc * dt;
-        state.rotation += state.angular_vel * dt;
-        state.rotation = state.rotation.sin().atan2(state.rotation.cos());
+        state.angular_vel.z += angular_acc * dt;
+
+        // Convert 2D rotation to quaternion
+        let new_angle = state.rotation.to_euler(EulerRot::XYZ).2 + state.angular_vel.z * dt;
+        state.rotation = Quat::from_rotation_z(new_angle);
 
         // Update linear velocity and position using simple Euler integration
         let velocity = state.velocity;
@@ -235,8 +148,8 @@ pub fn simulation_system(
             if check_failure_conditions(&state, &level) {
                 state.crashed = true;
                 state.position.y = LANDER_BASE_OFFSET;
-                state.velocity = Vec2::ZERO;
-                state.angular_vel = 0.0;
+                state.velocity = Vec3::ZERO;
+                state.angular_vel = Vec3::ZERO;
                 state.thrust_level = 0.0;
                 state.gimbal_angle = 0.0;
                 return;
@@ -244,8 +157,8 @@ pub fn simulation_system(
 
             // Not a crash, normal ground contact
             state.position.y = LANDER_BASE_OFFSET;
-            state.velocity = Vec2::ZERO;
-            state.angular_vel = 0.0;
+            state.velocity = Vec3::ZERO;
+            state.angular_vel = Vec3::ZERO;
             state.thrust_level = 0.0;
             state.gimbal_angle = 0.0;
         }
@@ -279,16 +192,12 @@ pub fn simulation_system(
     }
 }
 
-pub fn reset_simulation(
-    state: &mut LanderState,
-    level: &CurrentLevel,
-    camera_state: &mut CameraState,
-) {
+pub fn reset_2d(state: &mut LanderState, level: &CurrentLevel, camera_state: &mut CameraState) {
     *state = LanderState {
-        position: Vec2::new(level.config.initial.x0, level.config.initial.y0),
-        velocity: Vec2::new(level.config.initial.vx0, level.config.initial.vy0),
-        rotation: level.config.initial.initial_angle,
-        angular_vel: 0.0,
+        position: Vec3::new(level.config.initial.x0, level.config.initial.y0, 0.0),
+        velocity: Vec3::new(level.config.initial.vx0, level.config.initial.vy0, 0.0),
+        rotation: Quat::from_rotation_z(level.config.initial.initial_angle),
+        angular_vel: Vec3::new(0.0, 0.0, 0.0),
         fuel: level.config.initial.initial_fuel,
         thrust_level: 0.0,
         gimbal_angle: 0.0,
@@ -303,9 +212,4 @@ pub fn reset_simulation(
     camera_state.target_offset.x = 0.0;
     camera_state.target_offset.y = 0.0;
     camera_state.explosion_spawned = false;
-}
-
-// Helper function to calculate mass flow rate based on thrust
-fn calculate_mass_flow(thrust: f32, isp: f32) -> f32 {
-    thrust / (isp * 9.81) // 9.81 is standard gravity for Isp calculations
 }

@@ -307,15 +307,19 @@ pub fn update_visualization(
     level: Res<CurrentLevel>,
 ) {
     // Calculate view offset based on lander position
-    let offset = calculate_view_offset(lander_state.position);
+    let offset = calculate_view_offset(Vec2::new(lander_state.position.x, lander_state.position.y));
+
     camera_state.target_offset = offset;
 
     // Update lander position
     if let Ok(mut transform) = query_set.p0().get_single_mut() {
-        let screen_pos = world_to_screen(lander_state.position, offset);
+        let screen_pos = world_to_screen(
+            Vec2::new(lander_state.position.x, lander_state.position.y),
+            offset,
+        );
         transform.translation.x = screen_pos.x;
         transform.translation.y = screen_pos.y;
-        transform.rotation = Quat::from_rotation_z(lander_state.rotation);
+        transform.rotation = lander_state.rotation;
     }
 
     // Update ground and zone positions

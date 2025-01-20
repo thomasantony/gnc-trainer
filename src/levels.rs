@@ -78,7 +78,7 @@ pub struct LevelConfig {
     pub control_scheme: ControlScheme,
     pub success_message: String,
     pub failure_message: String,
-    pub dynamices_type: DynamicsType,
+    pub dynamics_type: DynamicsType,
 }
 
 #[derive(Debug, Deserialize)]

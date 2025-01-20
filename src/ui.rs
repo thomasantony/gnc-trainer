@@ -346,7 +346,10 @@ pub fn ui_system(
                 if let ControlScheme::ThrustVector = current_level.config.control_scheme {
                     ui.vertical(|ui| {
                         ui.label("Rotation:");
-                        ui.label(format!("Angle: {:.1}°", lander_state.rotation.to_degrees()));
+                        ui.label(format!(
+                            "Angle: {:.1}°",
+                            lander_state.rotation.to_euler(EulerRot::XYZ).2.to_degrees()
+                        ));
                         ui.label(format!(
                             "Gimbal: {:.1}°",
                             lander_state.gimbal_angle.to_degrees()

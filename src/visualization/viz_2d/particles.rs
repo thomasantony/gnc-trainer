@@ -165,8 +165,8 @@ pub fn particle_system(
             *visibility = Visibility::Hidden;
             kaboom(
                 &mut commands,
-                lander_state.position,
-                lander_state.velocity,
+                Vec2::new(lander_state.position.x, lander_state.position.y),
+                Vec2::new(lander_state.velocity.x, lander_state.velocity.y),
                 lander_transform,
             );
             camera_state.explosion_spawned = true;
@@ -179,19 +179,20 @@ pub fn particle_system(
         if timer.0.just_finished() {
             let num_particles =
                 (lander_state.thrust_level * PARTICLE_COUNT_PER_SPAWN as f32) as i32;
+            let rotation_2d = lander_state.rotation.to_euler(EulerRot::XYZ).2;
             let exhaust_angle =
-                lander_state.rotation + lander_state.gimbal_angle + std::f32::consts::FRAC_PI_2;
+                rotation_2d + lander_state.gimbal_angle + std::f32::consts::FRAC_PI_2;
             let exhaust_direction = -Vec2::new(exhaust_angle.cos(), exhaust_angle.sin());
 
             let base_offset = Vec2::new(
-                lander_state.rotation.sin() * LANDER_HEIGHT / 2.0,
-                -lander_state.rotation.cos() * LANDER_HEIGHT / 2.0,
+                rotation_2d.sin() * LANDER_HEIGHT / 2.0,
+                -rotation_2d.cos() * LANDER_HEIGHT / 2.0,
             );
 
             for _ in 0..num_particles {
                 spawn_particle(
                     &mut commands,
-                    lander_state.position,
+                    Vec2::new(lander_state.position.x, lander_state.position.y),
                     base_offset,
                     exhaust_direction,
                     camera_state.target_offset,

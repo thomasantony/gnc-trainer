@@ -15,6 +15,7 @@
         initial_angle: 1.578,  // [rad]
         initial_fuel: 70.98,   // [kg]
     ),
+    dynamics_type: Dynamics2D,
     success: (
         vx_max: 1.0,   // max horizontal landing speed
         vy_max: 2.0,   // max vertical landing speed

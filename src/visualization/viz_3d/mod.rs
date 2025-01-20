@@ -24,6 +24,11 @@ const SUN_RADIUS_M: f64 = 695_508_000_f64;
 const EARTH_ORBIT_RADIUS_M: f64 = 149.60e9;
 const EARTH_MOON_DIST_M: f64 = 384_400_000_f64;
 
+const EARTH_ALBEDO_MAP: &str = "textures/earth/base_color.jpg";
+
+const MOON_ALBEDO_MAP: &str = "textures/moon/base_color.jpg";
+const MOON_NORMAL_MAP: &str = "textures/moon/normal_map.jpg";
+
 const LANDER_X: f64 = MOON_RADIUS as f64 + INITIAL_ALTITUDE as f64;
 const LANDER_Y: f64 = 0.0;
 const LANDER_Z: f64 = 0.0;
@@ -119,7 +124,7 @@ fn setup_3d_scene(
     commands.spawn((
         DirectionalLight {
             color: Color::WHITE,
-            illuminance: 120_000.,
+            illuminance: 10_000.,
             shadows_enabled: true,
             ..default()
         },
@@ -136,8 +141,7 @@ fn setup_3d_scene(
     let sun_mesh_handle = meshes.add(Sphere::new(SUN_RADIUS_M as f32).mesh().ico(6).unwrap());
 
     commands.spawn_big_space_default::<GridCellType>(|root| {
-        // Add sun first
-
+        // Sun
         let sun_pos = DVec3::Z * (EARTH_MOON_DIST_M + EARTH_ORBIT_RADIUS_M);
         let (sun_cell, sun_pos) = root.grid().translation_to_grid(sun_pos);
 
@@ -146,7 +150,7 @@ fn setup_3d_scene(
             Mesh3d(sun_mesh_handle),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::WHITE,
-                emissive: LinearRgba::rgb(1000., 1000., 1000.),
+                emissive: LinearRgba::rgb(100., 100., 50.),
                 ..default()
             })),
             Transform::from_translation(sun_pos),
@@ -155,18 +159,18 @@ fn setup_3d_scene(
         ));
 
         // Earth
-        let earth_pos = DVec3::X * EARTH_ORBIT_RADIUS_M;
+        let earth_pos = DVec3::X * EARTH_MOON_DIST_M;
         let (earth_cell, earth_pos) = root.grid().translation_to_grid(earth_pos);
         let earth_mesh_handle = meshes.add(Sphere::new(EARTH_RADIUS).mesh().uv(32, 18));
-
+        let earth_material = materials.add(StandardMaterial {
+            base_color_texture: Some(asset_server.load(EARTH_ALBEDO_MAP)),
+            emissive: Color::srgb_u8(30, 30, 30).to_linear(),
+            ..default()
+        });
         root.insert((CelestialBodyType::Earth, Name::new("Earth")));
         root.spawn_spatial((
             Mesh3d(earth_mesh_handle),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::WHITE,
-                emissive: LinearRgba::rgb(1000., 1000., 1000.),
-                ..default()
-            })),
+            MeshMaterial3d(earth_material),
             Transform::from_translation(earth_pos),
             earth_cell,
         ));
@@ -177,8 +181,8 @@ fn setup_3d_scene(
         let moon_mesh_handle = meshes.add(Sphere::new(MOON_RADIUS as f32).mesh().uv(64, 180));
 
         let moon_material = materials.add(StandardMaterial {
-            base_color_texture: Some(asset_server.load("textures/moon/base_color.jpg")),
-            emissive: Color::srgb_u8(30, 30, 30).to_linear(),
+            base_color_texture: Some(asset_server.load(MOON_ALBEDO_MAP)),
+            normal_map_texture: Some(asset_server.load(MOON_NORMAL_MAP)),
             ..default()
         });
         root.insert((CelestialBodyType::Moon, Name::new("Moon")));
@@ -204,7 +208,7 @@ fn update_celestial_bodies(time: Res<Time>, mut event_writer: EventWriter<Spacec
     // Basic orbit for testing
     let orbit_period = 120.0; // 2 minutes per orbit
 
-    let slowdown = 0.1;
+    let slowdown = 1.0;
 
     let angle = (time.elapsed_secs() / orbit_period) * TAU as f32 * slowdown;
     let radius = MOON_RADIUS as f32 + INITIAL_ALTITUDE as f32;

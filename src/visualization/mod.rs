@@ -5,7 +5,10 @@ pub mod viz_3d;
 pub use common::*;
 use viz_2d::systems::cleanup_2d_visualization;
 
-use crate::{levels::CurrentLevel, ui::GameState};
+use crate::{
+    levels::{CurrentLevel, DynamicsType, GameLoadState},
+    ui::GameState,
+};
 use bevy::prelude::*;
 
 // Re-export the main types that other modules need
@@ -26,6 +29,7 @@ pub struct VisualizationPlugin;
 impl Plugin for VisualizationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<viz_2d::particles::ParticleSpawnTimer>()
+            .add_systems(OnEnter(GameState::Playing), spawn_camera)
             .add_systems(
                 Update,
                 (
@@ -35,10 +39,28 @@ impl Plugin for VisualizationPlugin {
                     viz_2d::systems::reset_visualization_system,
                     viz_2d::particles::particle_system,
                 )
-                    .run_if(in_state(GameState::Playing)),
+                    .run_if(|world: &World| {
+                        world.contains_resource::<CurrentLevel>()
+                            && matches!(
+                                world.resource::<State<GameState>>().get(),
+                                GameState::Playing
+                            )
+                            && matches!(
+                                world.resource::<State<GameLoadState>>().get(),
+                                GameLoadState::Ready
+                            )
+                            && matches!(
+                                world.resource::<CurrentLevel>().config.dynamics_type,
+                                DynamicsType::Dynamics2D
+                            )
+                    }),
             );
         app.add_systems(OnExit(GameState::Playing), cleanup_2d_visualization);
     }
+}
+
+fn spawn_camera(mut commands: Commands) {
+    commands.spawn((Camera2d, MainCamera));
 }
 
 // Common spawn function that delegates to correct visualization

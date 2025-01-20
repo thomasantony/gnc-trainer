@@ -39,9 +39,6 @@ fn create_triangle_mesh() -> Mesh {
     mesh
 }
 
-#[derive(Resource, Default)]
-pub struct ResetVisualization(pub bool);
-
 pub fn reset_visualization_system(
     mut commands: Commands,
     mut reset_flag: ResMut<ResetVisualization>,
@@ -306,6 +303,8 @@ pub fn update_visualization(
     lander_state: Res<LanderState>,
     level: Res<CurrentLevel>,
 ) {
+    info!("Running update_visualization"); // Add this
+
     // Calculate view offset based on lander position
     let offset = calculate_view_offset(Vec2::new(lander_state.position.x, lander_state.position.y));
 

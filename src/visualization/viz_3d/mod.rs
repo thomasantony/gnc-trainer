@@ -1,4 +1,8 @@
-use crate::{ui::GameState, GridCellType};
+use crate::{
+    levels::{CurrentLevel, DynamicsType, GameLoadState},
+    ui::GameState,
+    GridCellType,
+};
 use bevy::{
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     math::DVec3,
@@ -85,15 +89,19 @@ impl Plugin for Visualization3dPlugin {
             .add_plugins(BigSpacePlugin::<GridCellType>::new(true))
             .insert_resource(ClearColor(Color::srgb(0.0, 0.0, 0.0)))
             .add_event::<SpacecraftStateUpdate>()
-            .add_systems(Update, (camera_inputs,))
             .add_systems(
                 Update,
                 (
+                    camera_inputs,
                     update_celestial_bodies,
                     render_lander_state,
                     camera::sync_camera,
                 )
-                    .run_if(in_state(GameState::ThreeDViz)),
+                    .run_if(in_state(GameState::ThreeDViz))
+                    .run_if(in_state(GameLoadState::Ready))
+                    .run_if(|level: Res<CurrentLevel>| {
+                        matches!(level.config.dynamics_type, DynamicsType::Dynamics3D)
+                    }),
             )
             .add_plugins(PanOrbitCameraPlugin);
     }

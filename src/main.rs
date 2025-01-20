@@ -1,4 +1,4 @@
-use bevy::{asset::AssetMetaCheck, log::LogPlugin, prelude::*};
+use bevy::{asset::AssetMetaCheck, log::LogPlugin, prelude::*, render::RenderPlugin};
 use bevy_egui::EguiPlugin;
 
 mod assets;
@@ -12,7 +12,7 @@ mod visualization;
 
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_persistent::Persistent;
-use levels::{CurrentLevel, GameLoadState, LevelManager, LevelPlugin};
+use levels::{CurrentLevel, DynamicsType, GameLoadState, LevelManager, LevelPlugin};
 use persistence::{setup_persistence, LevelProgress};
 use rhai_api::ScriptEngine;
 use simulation::{reset_simulation, simulation_system, LanderState};
@@ -104,7 +104,7 @@ fn main() {
             (setup, setup_persistence, spawn_visualization),
         )
         .add_plugins(VisualizationPlugin)
-        .add_plugins(Visualization3dPlugin)
+        // .add_plugins(Visualization3dPlugin)
         .add_systems(
             Update,
             (
@@ -185,4 +185,12 @@ fn level_completion_check(
             popup.completed_level = *level_num;
         }
     }
+}
+
+fn run_2d_mode(level: Res<CurrentLevel>) -> bool {
+    matches!(level.config.dynamics_type, DynamicsType::Dynamics2D)
+}
+
+fn run_3d_mode(level: Res<CurrentLevel>) -> bool {
+    matches!(level.config.dynamics_type, DynamicsType::Dynamics3D)
 }

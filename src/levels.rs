@@ -59,6 +59,13 @@ pub struct FailureCriteria {
     pub bounds: Option<BoundingBox>, // Optional out-of-bounds box that causes failure
 }
 
+#[derive(Debug, Deserialize, Clone, Default)]
+pub enum DynamicsType {
+    #[default]
+    Dynamics2D,
+    Dynamics3D,
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct LevelConfig {
     pub name: String,
@@ -71,6 +78,7 @@ pub struct LevelConfig {
     pub control_scheme: ControlScheme,
     pub success_message: String,
     pub failure_message: String,
+    pub dynamices_type: DynamicsType,
 }
 
 #[derive(Debug, Deserialize)]
